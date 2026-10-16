@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{BFF7E83B-ACD0-447F-A4DE-A11D726ACAE1}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>Core</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <UseMultiToolTask>true</UseMultiToolTask>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_CRT_NO_VA_START_VALIDATION;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS;FLAC__NO_DLL;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(VcpkgInstalled)\include;$(VcpkgInstalled)\include\opus;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Lib>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;_CRT_NO_VA_START_VALIDATION;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS;FLAC__NO_DLL;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(VcpkgInstalled)\include;$(VcpkgInstalled)\include\opus;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+    <Lib>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="BinaryReader.h" />
+    <ClInclude Include="BinaryWriter.h" />
+    <ClInclude Include="CastExport.h" />
+    <ClInclude Include="Compression.h" />
+    <ClInclude Include="Encryption.h" />
+    <ClInclude Include="FileSystems.h" />
+    <ClInclude Include="GLTFExport.h" />
+    <ClInclude Include="HalfFloats.h" />
+    <ClInclude Include="Hashing.h" />
+    <ClInclude Include="fpng.h" />
+    <ClInclude Include="XMEImport.h" />
+    <ClInclude Include="FBXWriter.h" />
+    <ClInclude Include="GameImageProcessors.h" />
+    <ClInclude Include="HuskyMath.h" />
+    <ClInclude Include="Image.h" />
+    <ClInclude Include="MayaExport.h" />
+    <ClInclude Include="MemoryReader.h" />
+    <ClInclude Include="MemoryWriter.h" />
+    <ClInclude Include="OBJExport.h" />
+    <ClInclude Include="ProcessReader.h" />
+    <ClInclude Include="Salsa20.h" />
+    <ClInclude Include="SEAnimExport.h" />
+    <ClInclude Include="SEModelExport.h" />
+    <ClInclude Include="SettingsManager.h" />
+    <ClInclude Include="SHA1.h" />
+    <ClInclude Include="Sound.h" />
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="Strings.h" />
+    <ClInclude Include="ValveSMDExport.h" />
+    <ClInclude Include="VectorMath.h" />
+    <ClInclude Include="WebClient.h" />
+    <ClInclude Include="WraithAnim.h" />
+    <ClInclude Include="WraithAsset.h" />
+    <ClInclude Include="WraithModel.h" />
+    <ClInclude Include="WraithNameIndex.h" />
+    <ClInclude Include="WraithX.h" />
+    <ClInclude Include="XAnimRawExport.h" />
+    <ClInclude Include="XMBExport.h" />
+    <ClInclude Include="XMEExport.h" />
+    <ClInclude Include="XNALaraExport.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="BinaryReader.cpp" />
+    <ClCompile Include="BinaryWriter.cpp" />
+    <ClCompile Include="CastExport.cpp" />
+    <ClCompile Include="Compression.cpp" />
+    <ClCompile Include="Encryption.cpp" />
+    <ClCompile Include="FileSystems.cpp" />
+    <ClCompile Include="GLTFExport.cpp" />
+    <ClCompile Include="HalfFloats.cpp" />
+    <ClCompile Include="Hashing.cpp" />
+    <ClCompile Include="fpng.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Image.cpp" />
+    <ClCompile Include="XMEImport.cpp" />
+    <ClCompile Include="FBXWriter.cpp" />
+    <ClCompile Include="GameImageProcessors.cpp" />
+    <ClCompile Include="HuskyMath.cpp" />
+    <ClCompile Include="MayaExport.cpp" />
+    <ClCompile Include="MemoryReader.cpp" />
+    <ClCompile Include="OBJExport.cpp" />
+    <ClCompile Include="ProcessReader.cpp" />
+    <ClCompile Include="Salsa20.cpp" />
+    <ClCompile Include="SEAnimExport.cpp" />
+    <ClCompile Include="SEModelExport.cpp" />
+    <ClCompile Include="SettingsManager.cpp" />
+    <ClCompile Include="SHA1.cpp" />
+    <ClCompile Include="Sound.cpp" />
+    <ClCompile Include="stdafx.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Strings.cpp" />
+    <ClCompile Include="ValveSMDExport.cpp" />
+    <ClCompile Include="VectorMath.cpp" />
+    <ClCompile Include="WebClient.cpp" />
+    <ClCompile Include="WraithAnim.cpp" />
+    <ClCompile Include="WraithAsset.cpp" />
+    <ClCompile Include="WraithModel.cpp" />
+    <ClCompile Include="WraithNameIndex.cpp" />
+    <ClCompile Include="WraithX.cpp" />
+    <ClCompile Include="XAnimRawExport.cpp" />
+    <ClCompile Include="XMBExport.cpp" />
+    <ClCompile Include="XMEExport.cpp" />
+    <ClCompile Include="XNALaraExport.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

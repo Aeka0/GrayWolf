@@ -1,0 +1,53 @@
+---
+# clang-tidy config for GrayWolf (C++/MFC/Win32/D3D11, MSVC toolchain).
+# Tuned against real output on this codebase 2026-08-31 - see tools/run_clang_tidy.py for how to invoke this and why (VS's native EnableClangTidyCodeAnalysis
+# MSBuild integration was verified to mechanically work but is not what drives that script - see its
+# own header comment; there is no compile_commands.json lying around, this project is MSBuild-based,
+# not CMake - the script generates one itself, reusing the real flags VS's own integration captured).
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  clang-analyzer-*,
+  readability-*,
+  cppcoreguidelines-*,
+  -readability-identifier-naming,
+  -readability-magic-numbers,
+  -readability-function-cognitive-complexity,
+  -readability-else-after-return,
+  -readability-braces-around-statements,
+  -readability-uppercase-literal-suffix,
+  -readability-implicit-bool-conversion,
+  -readability-avoid-const-params-in-decls,
+  -readability-isolate-declaration,
+  -readability-convert-member-functions-to-static,
+  -readability-identifier-length,
+  -bugprone-reserved-identifier,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-pro-type-union-access,
+  -cppcoreguidelines-pro-type-const-cast,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-avoid-c-arrays,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-macro-usage,
+  -fuchsia-*,
+  -llvmlibc-*,
+  -altera-*,
+  -android-*,
+  -zircon-*,
+  -objc-*,
+  -mpi-*,
+  -linuxkernel-*,
+  -abseil-*,
+  -boost-*,
+  -darwin-*
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '(GrayWolf|Core)[/\\][^/\\]+\.h$'
+FormatStyle: none

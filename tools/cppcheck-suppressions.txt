@@ -1,0 +1,30 @@
+# Suppressions for tools/run_cppcheck.sh - confirmed false-positive / tool-limitation classes
+# only, each verified against a real run against this codebase on 2026-08-31 before being added
+# here. Do not add speculative suppressions - confirm the finding is bogus first.
+
+# Third-party headers (vcpkg's stb, tinygltf, nlohmann/json) are #include'd with an
+# *_IMPLEMENTATION macro into GLTFExport.cpp, so their bodies are analyzed as part of that
+# translation unit (uninitvar in stb_image.h, syntaxError in tiny_gltf.h's __has_warning() and in
+# json.hpp): code we don't control. fpng.cpp is the one library still kept in the repo.
+*:*stb_image.h
+*:*stb_image_write.h
+*:*tiny_gltf.h
+*:*json.hpp
+*:*fpng.cpp
+
+# MSVC SEH (__try/__except) with a comma-expression filter, e.g.
+#   __except (CrashCode = ..., CrashAddr = (uint64_t)GetExceptionInformation()->..., EXCEPTION_EXECUTE_HANDLER)
+# cppcheck's preprocessor treats __except as a fixed-arity macro and fails to expand the
+# comma-expression filter - a real language-extension parsing limitation of the tool, not a
+# code bug. Confirmed against src/GrayWolf/GrayWolf/Main.cpp:1387 originally.
+syntaxError:*Main.cpp
+
+
+
+# SHA1.cpp buffer_to_block indexes a std::string that cppcheck assumes empty; both callers only
+# reach it once the buffer holds exactly BLOCK_BYTES (64) bytes (read loop check, then padding loop).
+# Pre-existing; surfaced when SHA1.cpp was next staged (its unused from_file was removed).
+containerOutOfBounds:*SHA1.cpp
+# Iw6AssetList.cpp ReadAt copies sizeof(T) bytes into a T after checking the zone holds them; the CI's
+# cppcheck (choco, newer than 2.21) reads the memcpy as out of bounds of the destination.
+bufferAccessOutOfBounds:*Iw6AssetList.cpp

@@ -1,0 +1,252 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Header Files\Utilities">
+      <UniqueIdentifier>{618e9447-cfdc-466a-bc1b-d2a3050eacdb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Utilities">
+      <UniqueIdentifier>{aa6f2e79-653f-4b3e-b0e6-33cc2d092bd0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\External">
+      <UniqueIdentifier>{6c105261-c817-48b6-ab0a-a0a5e7798371}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\External">
+      <UniqueIdentifier>{279b868e-8854-43f2-904c-0d2f5258c36a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Exporters">
+      <UniqueIdentifier>{6b646e2d-8a91-4630-a47c-abd33bbc1281}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Exporters">
+      <UniqueIdentifier>{54eb8300-a279-461c-8625-e4995c42f045}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Interface">
+      <UniqueIdentifier>{4b3f8327-7721-4c11-bfa6-d43f2bc1cb63}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Interface">
+      <UniqueIdentifier>{ae7f4755-e526-46e1-abe1-e4b800c56219}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ProcessReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BinaryReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Strings.h">
+      <Filter>Header Files\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="HalfFloats.h">
+      <Filter>Header Files\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="FileSystems.h">
+      <Filter>Header Files\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="BinaryWriter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Compression.h">
+      <Filter>Header Files\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="Salsa20.h">
+      <Filter>Header Files\External</Filter>
+    </ClInclude>
+    <ClInclude Include="Encryption.h">
+      <Filter>Header Files\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="VectorMath.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="WraithAsset.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="WraithAnim.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SEAnimExport.h">
+      <Filter>Header Files\Exporters</Filter>
+    </ClInclude>
+    <ClInclude Include="Hashing.h">
+      <Filter>Header Files\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="SHA1.h">
+      <Filter>Header Files\External</Filter>
+    </ClInclude>
+    <ClInclude Include="WraithModel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MayaExport.h">
+      <Filter>Header Files\Exporters</Filter>
+    </ClInclude>
+    <ClInclude Include="ValveSMDExport.h">
+      <Filter>Header Files\Exporters</Filter>
+    </ClInclude>
+    <ClInclude Include="OBJExport.h">
+      <Filter>Header Files\Exporters</Filter>
+    </ClInclude>
+    <ClInclude Include="XMEExport.h">
+      <Filter>Header Files\Exporters</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="WraithX.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Image.h">
+      <Filter>Header Files\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="SettingsManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XNALaraExport.h">
+      <Filter>Header Files\Exporters</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryWriter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Sound.h">
+      <Filter>Header Files\Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="WraithNameIndex.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XAnimRawExport.h">
+      <Filter>Header Files\Exporters</Filter>
+    </ClInclude>
+    <ClInclude Include="SEModelExport.h">
+      <Filter>Header Files\Exporters</Filter>
+    </ClInclude>
+    <ClInclude Include="WebClient.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XMBExport.h">
+      <Filter>Header Files\Exporters</Filter>
+    </ClInclude>
+    <ClInclude Include="GLTFExport.h">
+      <Filter>Header Files\Exporters</Filter>
+    </ClInclude>
+    <ClInclude Include="CastExport.h">
+      <Filter>Header Files\Exporters</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="stdafx.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ProcessReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="BinaryReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Strings.cpp">
+      <Filter>Source Files\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="HalfFloats.cpp">
+      <Filter>Source Files\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="FileSystems.cpp">
+      <Filter>Source Files\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="BinaryWriter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Compression.cpp">
+      <Filter>Source Files\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="Salsa20.cpp">
+      <Filter>Source Files\External</Filter>
+    </ClCompile>
+    <ClCompile Include="Encryption.cpp">
+      <Filter>Source Files\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="VectorMath.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="WraithAsset.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="WraithAnim.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SEAnimExport.cpp">
+      <Filter>Source Files\Exporters</Filter>
+    </ClCompile>
+    <ClCompile Include="Hashing.cpp">
+      <Filter>Source Files\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="SHA1.cpp">
+      <Filter>Source Files\External</Filter>
+    </ClCompile>
+    <ClCompile Include="WraithModel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MayaExport.cpp">
+      <Filter>Source Files\Exporters</Filter>
+    </ClCompile>
+    <ClCompile Include="ValveSMDExport.cpp">
+      <Filter>Source Files\Exporters</Filter>
+    </ClCompile>
+    <ClCompile Include="OBJExport.cpp">
+      <Filter>Source Files\Exporters</Filter>
+    </ClCompile>
+    <ClCompile Include="XMEExport.cpp">
+      <Filter>Source Files\Exporters</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoryReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="WraithX.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Image.cpp">
+      <Filter>Source Files\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="SettingsManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="XNALaraExport.cpp">
+      <Filter>Source Files\Exporters</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound.cpp">
+      <Filter>Source Files\Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="WraithNameIndex.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="XAnimRawExport.cpp">
+      <Filter>Source Files\Exporters</Filter>
+    </ClCompile>
+    <ClCompile Include="SEModelExport.cpp">
+      <Filter>Source Files\Exporters</Filter>
+    </ClCompile>
+    <ClCompile Include="WebClient.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="XMBExport.cpp">
+      <Filter>Source Files\Exporters</Filter>
+    </ClCompile>
+    <ClCompile Include="GLTFExport.cpp">
+      <Filter>Source Files\Exporters</Filter>
+    </ClCompile>
+    <ClCompile Include="CastExport.cpp">
+      <Filter>Source Files\Exporters</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

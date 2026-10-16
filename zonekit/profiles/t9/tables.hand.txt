@@ -1,0 +1,3 @@
+# Cold War (T9) hand tables: readers with a shape the machine-code transcriber does not render.
+# Each cites the disassembly that justifies it. A table here overrides the generated one of the
+# same name.

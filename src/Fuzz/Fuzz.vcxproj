@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- GrayWolf's file parsers under libFuzzer + AddressSanitizer (MSVC /fsanitize=fuzzer,address).
+       Built only by Fuzz.sln (never by GrayWolf.sln, never linked into GrayWolf.exe): the app's own
+       sources (every GrayWolf\*.cpp but Main.cpp, every Games\<game>\*.cpp) compiled again with
+       coverage instrumentation, plus FuzzTargets.cpp, the harnesses. Run through tools/fuzz.ps1. -->
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Dev|x64">
+      <Configuration>Dev</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{F2D0AF5A-0B6B-4098-A228-FED4FD10E165}</ProjectGuid>
+    <RootNamespace>Fuzz</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <UseMultiToolTask>true</UseMultiToolTask>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <EnableASAN>true</EnableASAN>
+    <EnableFuzzer>true</EnableFuzzer>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <TargetName>GrayWolfFuzz</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup>
+    <GwApp>..\GrayWolf\GrayWolf\</GwApp>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(GwApp);..\GrayWolf\OatInterop;..\Core\Core;$(VcpkgInstalled)\include;..\External\DirectXShaderCompiler\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_UNICODE;UNICODE;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS;CASCLIB_NO_AUTO_LINK_LIBRARY;CASCLIB_UNICODE;CASCLIB_DETECT_UNICODE_MISMATCHES;FLAC__NO_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>stdafx.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ExceptionHandling>Async</ExceptionHandling>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+      <AdditionalLibraryDirectories>..\External\OpenAssetTools\build\lib\Release_x64;$(VcpkgInstalled)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>miniz.lib;opus.lib;DirectXTex.lib;DirectXTK.lib;fmt.lib;casc.lib;zs.lib;FLAC.lib;ogg.lib;ZoneLoading.lib;ZoneCommon.lib;ObjWriting.lib;ObjLoading.lib;ObjImage.lib;Common.lib;ObjCommon.lib;Parser.lib;Utils.lib;Cryptography.lib;XMemCompress.lib;zlib.lib;lzx.lib;libtomcrypt.lib;libtommath.lib;salsa20.lib;lz4.lib;minilzo.lib;minizip.lib;opengl32.lib;glu32.lib;CLI11.lib;shell32.lib;dbghelp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Core\Core\Core.vcxproj">
+      <Project>{bff7e83b-acd0-447f-a4de-a11d726acae1}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\GrayWolf\OatInterop\OatInterop.vcxproj">
+      <Project>{7e1c5a2d-3b94-4f16-9c0a-2d6e8b4f1a77}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(GwApp)stdafx.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="$(GwApp)*.cpp" Exclude="$(GwApp)stdafx.cpp;$(GwApp)Main.cpp" />
+    <ClCompile Include="$(GwApp)Games\**\*.cpp">
+      <ObjectFileName>$(IntDir)Games\%(RecursiveDir)</ObjectFileName>
+      <AdditionalIncludeDirectories>$(GwApp);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="FuzzTargets.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

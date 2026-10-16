@@ -1,0 +1,438 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Dev|x64">
+      <Configuration>Dev</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{948F6C8F-B11C-4E84-AC0E-8A8B1E94D119}</ProjectGuid>
+    <RootNamespace>GrayWolf</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <!-- files compile in parallel across the per-game object folders, not one folder batch at a time -->
+    <UseMultiToolTask>true</UseMultiToolTask>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Dev|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Dev|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetName>GrayWolf</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <TargetName>GrayWolf</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Dev|x64'">
+    <TargetName>GrayWolf</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>..\OatInterop;..\..\Core\Core;$(VcpkgInstalled)\include;..\..\External\DirectXShaderCompiler\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_UNICODE;UNICODE;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS;CASCLIB_NO_AUTO_LINK_LIBRARY;CASCLIB_UNICODE;CASCLIB_DETECT_UNICODE_MISMATCHES;FLAC__NO_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>stdafx.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ExceptionHandling>Async</ExceptionHandling>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>opengl32.lib;glu32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <UACExecutionLevel>AsInvoker</UACExecutionLevel>
+    </Link>
+    <Manifest>
+      <AdditionalManifestFiles>GrayWolf.manifest %(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MinSpace</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>..\OatInterop;..\..\Core\Core;$(VcpkgInstalled)\include;..\..\External\DirectXShaderCompiler\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_UNICODE;UNICODE;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS;CASCLIB_NO_AUTO_LINK_LIBRARY;CASCLIB_UNICODE;CASCLIB_DETECT_UNICODE_MISMATCHES;FLAC__NO_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>stdafx.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ExceptionHandling>Async</ExceptionHandling>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalLibraryDirectories>..\..\External\OpenAssetTools\build\lib\Release_x64;$(VcpkgInstalled)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>miniz.lib;opus.lib;DirectXTex.lib;DirectXTK.lib;fmt.lib;casc.lib;zs.lib;FLAC.lib;ogg.lib;ZoneLoading.lib;ZoneCommon.lib;ObjWriting.lib;ObjLoading.lib;ObjImage.lib;Common.lib;ObjCommon.lib;Parser.lib;Utils.lib;Cryptography.lib;XMemCompress.lib;zlib.lib;lzx.lib;libtomcrypt.lib;libtommath.lib;salsa20.lib;lz4.lib;minilzo.lib;minizip.lib;opengl32.lib;glu32.lib;CLI11.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <UACExecutionLevel>AsInvoker</UACExecutionLevel>
+    </Link>
+    <Manifest>
+      <AdditionalManifestFiles>GrayWolf.manifest %(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Dev|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>..\OatInterop;..\..\Core\Core;$(VcpkgInstalled)\include;..\..\External\DirectXShaderCompiler\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_UNICODE;UNICODE;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS;CASCLIB_NO_AUTO_LINK_LIBRARY;CASCLIB_UNICODE;CASCLIB_DETECT_UNICODE_MISMATCHES;FLAC__NO_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>stdafx.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ExceptionHandling>Async</ExceptionHandling>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalLibraryDirectories>..\..\External\OpenAssetTools\build\lib\Release_x64;$(VcpkgInstalled)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>miniz.lib;opus.lib;DirectXTex.lib;DirectXTK.lib;fmt.lib;casc.lib;zs.lib;FLAC.lib;ogg.lib;ZoneLoading.lib;ZoneCommon.lib;ObjWriting.lib;ObjLoading.lib;ObjImage.lib;Common.lib;ObjCommon.lib;Parser.lib;Utils.lib;Cryptography.lib;XMemCompress.lib;zlib.lib;lzx.lib;libtomcrypt.lib;libtommath.lib;salsa20.lib;lz4.lib;minilzo.lib;minizip.lib;opengl32.lib;glu32.lib;CLI11.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <UACExecutionLevel>AsInvoker</UACExecutionLevel>
+    </Link>
+    <Manifest>
+      <AdditionalManifestFiles>GrayWolf.manifest %(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\Core\Core.vcxproj">
+      <Project>{bff7e83b-acd0-447f-a4de-a11d726acae1}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\OatInterop\OatInterop.vcxproj">
+      <Project>{7e1c5a2d-3b94-4f16-9c0a-2d6e8b4f1a77}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="AppLog.cpp" />
+    <ClCompile Include="stdafx.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="CascFileSystem.cpp" />
+    <ClCompile Include="CoDAssets.cpp" />
+    <ClCompile Include="LiveGames.cpp" />
+    <ClCompile Include="LiveExport.cpp" />
+    <ClCompile Include="PackageFileMode.cpp" />
+    <ClCompile Include="Games\GameModule.cpp" />
+    <!-- Per-game adapters: every Games\<game>\*.cpp is compiled, so a new game adds files only -->
+    <ClCompile Include="Games\*\*.cpp">
+      <!-- the same file name in every game folder: one object folder per game -->
+      <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <!-- the gdt kind's converters, one file per type (Gdt.h): a new type adds a file only -->
+    <ClCompile Include="Games\*\Gdt\*.cpp">
+      <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="FastFile.cpp" />
+    <ClCompile Include="FastFile.InfinityWard.cpp" />
+    <ClCompile Include="FastFile.Treyarch.cpp" />
+    <ClCompile Include="FastFile.T9.cpp" />
+    <ClCompile Include="FastFile.Sledgehammer.cpp" />
+    <ClCompile Include="VCDiff.cpp" />
+    <ClCompile Include="WorldWar2Crypto.cpp" />
+    <ClCompile Include="CoDAssetType.cpp" />
+    <ClCompile Include="CoDCDNCache.cpp" />
+    <ClCompile Include="CoDCDNDownloader.cpp" />
+    <ClCompile Include="GameCommand.cpp" />
+    <ClCompile Include="ExportWriters.cpp" />
+    <ClCompile Include="ExportWriters.Sound.cpp" />
+    <ClCompile Include="DiskGame.cpp" />
+    <ClCompile Include="DiskGame.Cli.cpp" />
+    <ClCompile Include="DiskGame.Index.cpp" />
+    <ClCompile Include="DiskGame.LevelNames.cpp" />
+    <ClCompile Include="DiskGame.Monitor.cpp" />
+    <ClCompile Include="ZonekitZone.cpp" />
+    <ClCompile Include="ZonekitZone.Data.cpp" />
+    <ClCompile Include="ZonekitZone.Tables.cpp" />
+    <ClCompile Include="ZonekitZone.Bundles.cpp" />
+    <ClCompile Include="Techsets.cpp" />
+    <ClCompile Include="DxilReflection.cpp" />
+    <ClCompile Include="VirtualGameSession.cpp" />
+    <ClCompile Include="CoDIWIDecoder.cpp" />
+    <ClCompile Include="MapSceneExport.cpp" />
+    <ClCompile Include="CoDIWITranslator.cpp" />
+    <ClCompile Include="CoDPackageCache.cpp" />
+    <ClCompile Include="CoDQTangent.cpp" />
+    <ClCompile Include="CoDRawImageTranslator.cpp" />
+    <ClCompile Include="CoDXAnimTranslator.cpp" />
+    <ClCompile Include="CoDXModelBonesHelper.cpp" />
+    <ClCompile Include="CoDXModelHelper.cpp" />
+    <ClCompile Include="CoDXModelTranslator.cpp" />
+    <ClCompile Include="GameReaders.cpp" />
+    <ClCompile Include="CoDFileHandle.cpp" />
+    <ClCompile Include="CoDFileSystem.cpp" />
+    <ClCompile Include="GltfSceneWriter.cpp" />
+    <ClCompile Include="MapGlbWriter.cpp" />
+    <ClCompile Include="MapImportScript.cpp" />
+    <ClCompile Include="MapLive.cpp" />
+    <ClCompile Include="AssetIndex.cpp" />
+    <ClCompile Include="AssetFilter.cpp" />
+    <ClCompile Include="AssetPreview.cpp" />
+    <ClCompile Include="ModelPreview.cpp" />
+    <ClCompile Include="ModelPreviewGPU.cpp" />
+    <ClCompile Include="PreviewLoader.cpp" />
+    <ClCompile Include="PreviewTextures.cpp" />
+    <ClCompile Include="MaterialDescription.cpp" />
+    <ClCompile Include="CastMaterials.cpp" />
+    <ClCompile Include="MapCastWriter.cpp" />
+    <ClCompile Include="MapCollision.cpp" />
+    <ClCompile Include="MapRadiantWriter.cpp" />
+    <ClCompile Include="SoundAliasCsv.cpp" />
+    <ClCompile Include="MapCollisionWriter.cpp" />
+    <ClCompile Include="MapMaterials.cpp" />
+    <ClCompile Include="ModelViewport.cpp" />
+    <ClCompile Include="CastReader.cpp" />
+    <ClCompile Include="SeAnimReader.cpp" />
+    <ClCompile Include="XAnimBinReader.cpp" />
+    <ClCompile Include="SkeletalPreview.cpp" />
+    <ClCompile Include="ImGuiShell.cpp" />
+    <ClCompile Include="AudioPlayer.cpp" />
+    <ClCompile Include="CerberusCrypto.cpp" />
+    <ClCompile Include="OatBridge.cpp" />
+    <ClCompile Include="ScriptExport.cpp" />
+    <ClCompile Include="Gdt.cpp" />
+    <ClCompile Include="GdtWriter.cpp" />
+    <ClCompile Include="MaterialGdt.cpp" />
+    <ClCompile Include="GameInstalls.cpp" />
+    <ClCompile Include="LauncherIcons.cpp" />
+    <ClCompile Include="NameDbUpdater.cpp" />
+    <ClCompile Include="Updater.cpp" />
+    <ClCompile Include="ImGuiUpdates.cpp" />
+    <ClCompile Include="ZoneSource.cpp" />
+    <ClCompile Include="ImGuiLoadGamePanel.cpp" />
+    <ClCompile Include="ImGuiDialogs.cpp" />
+    <ClCompile Include="BlenderLauncher.cpp" />
+    <ClCompile Include="ImGuiBlender.cpp" />
+    <ClCompile Include="UiAsync.cpp" />
+    <ClCompile Include="CliCommands.Blender.cpp" />
+    <ClCompile Include="ImGuiLoadGamePanel.Disk.cpp" />
+    <ClCompile Include="IWDSoundDecoder.cpp" />
+    <ClCompile Include="GameVanguard.cpp" />
+    <ClCompile Include="GameWorldWar2.cpp" />
+    <ClCompile Include="IPAKCache.cpp" />
+    <ClCompile Include="IPAKSupport.cpp" />
+    <ClCompile Include="IWDCache.cpp" />
+    <ClCompile Include="IWDSupport.cpp" />
+    <ClCompile Include="CliSupport.cpp" />
+    <ClCompile Include="CliCommands.Misc.cpp" />
+    <ClCompile Include="CliCommands.AssetExport.cpp" />
+    <ClCompile Include="CliCommands.Tools.cpp" />
+    <ClCompile Include="CliCommands.Casc.cpp" />
+    <ClCompile Include="CliCommands.ZoneWalk.cpp" />
+    <ClCompile Include="MemoryBudget.cpp" />
+    <ClCompile Include="ZoneTableWalker.cpp" />
+    <ClCompile Include="CliCommands.Audio.cpp" />
+    <ClCompile Include="CliCommands.ModelPreview.cpp" />
+    <ClCompile Include="Main.cpp" />
+    <ClCompile Include="PAKCache.cpp" />
+    <ClCompile Include="PAKSupport.cpp" />
+    <ClCompile Include="Parasyte.cpp" />
+    <ClCompile Include="SABCache.cpp" />
+    <ClCompile Include="SABSupport.cpp" />
+    <ClCompile Include="Siren.cpp" />
+    <ClCompile Include="WinFileSystem.cpp" />
+    <ClCompile Include="XPAKCache.cpp" />
+    <ClCompile Include="XPAKSupport.cpp" />
+    <ClCompile Include="XPTOCCache.cpp" />
+    <ClCompile Include="XSUBCache.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CliOptions.h" />
+    <ClInclude Include="CliCommandOptions.h" />
+    <ClInclude Include="CliSupport.h" />
+    <ClInclude Include="CliCommands.h" />
+    <ClInclude Include="MemoryBudget.h" />
+    <ClInclude Include="ZoneTableWalker.h" />
+    <ClInclude Include="AppLog.h" />
+    <ClInclude Include="CascFileSystem.h" />
+    <ClInclude Include="CoDAssets.h" />
+    <ClInclude Include="LiveExport.h" />
+    <ClInclude Include="PackageFileMode.h" />
+    <ClInclude Include="Games\GameModule.h" />
+    <ClInclude Include="FastFile.h" />
+    <ClInclude Include="FastFile.Internal.h" />
+    <ClInclude Include="WorldWar2Crypto.h" />
+    <ClInclude Include="ZoneAssetTypes.h" />
+    <ClInclude Include="CoDAssetType.h" />
+    <ClInclude Include="CoDCDNCache.h" />
+    <ClInclude Include="CoDCDNDownloader.h" />
+    <ClInclude Include="GameCommand.h" />
+    <ClInclude Include="ExportWriters.h" />
+    <ClInclude Include="DiskGame.h" />
+    <ClInclude Include="DiskGame.Monitor.h" />
+    <ClInclude Include="DiskGameCli.h" />
+    <ClInclude Include="ZonekitZone.h" />
+    <ClInclude Include="Techsets.h" />
+    <ClInclude Include="DxilReflection.h" />
+    <ClInclude Include="ZoneFormat.h" />
+    <ClInclude Include="ExportNaming.h" />
+    <ClInclude Include="VirtualGameSession.h" />
+    <ClInclude Include="CoDIWIDecoder.h" />
+    <ClInclude Include="MapSceneExport.h" />
+    <ClInclude Include="CoDIWITranslator.h" />
+    <ClInclude Include="CoDPackageCache.h" />
+    <ClInclude Include="CoDQTangent.h" />
+    <ClInclude Include="CoDRawImageTranslator.h" />
+    <ClInclude Include="CoDXAnimReader.h" />
+    <ClInclude Include="CoDXAnimTranslator.h" />
+    <ClInclude Include="CoDXConverter.h" />
+    <ClInclude Include="CoDXModelBonesHelper.h" />
+    <ClInclude Include="CoDXModelHelper.h" />
+    <ClInclude Include="CoDXModelTranslator.h" />
+    <ClInclude Include="ICoDGame.h" />
+    <ClInclude Include="GameReaders.h" />
+    <ClInclude Include="ModernIwReaders.h" />
+    <ClInclude Include="PackedXAnim.h" />
+    <ClInclude Include="DBGameAssets.h" />
+    <ClInclude Include="VCDiff.h" />
+    <ClInclude Include="DBGameFiles.h" />
+    <ClInclude Include="DBGameGenerics.h" />
+    <ClInclude Include="CoDFileHandle.h" />
+    <ClInclude Include="CoDFileSystem.h" />
+    <ClInclude Include="AssetIndex.h" />
+    <ClInclude Include="AssetFilter.h" />
+    <ClInclude Include="AssetPreview.h" />
+    <ClInclude Include="ModelPreview.h" />
+    <ClInclude Include="ModelPreviewGPU.h" />
+    <ClInclude Include="PreviewLoader.h" />
+    <ClInclude Include="PreviewTextures.h" />
+    <ClInclude Include="MaterialDescription.h" />
+    <ClInclude Include="CastMaterials.h" />
+    <ClInclude Include="MapCastWriter.h" />
+    <ClInclude Include="MapCollision.h" />
+    <ClInclude Include="MapRadiantWriter.h" />
+    <ClInclude Include="SoundAliasCsv.h" />
+    <ClInclude Include="MapCollisionWriter.h" />
+    <ClInclude Include="MapSceneWriter.h" />
+    <ClInclude Include="MapMaterials.h" />
+    <ClInclude Include="CastReader.h" />
+    <ClInclude Include="SeAnimReader.h" />
+    <ClInclude Include="XAnimBinReader.h" />
+    <ClInclude Include="SkeletalPreview.h" />
+    <ClInclude Include="ModelViewport.h" />
+    <ClInclude Include="ImGuiShell.h" />
+    <ClInclude Include="AudioPlayer.h" />
+    <ClInclude Include="CerberusCrypto.h" />
+    <ClInclude Include="OatBridge.h" />
+    <ClInclude Include="ScriptExport.h" />
+    <ClInclude Include="Gdt.h" />
+    <ClInclude Include="GdtWriter.h" />
+    <ClInclude Include="MaterialGdt.h" />
+    <ClInclude Include="GameInstalls.h" />
+    <ClInclude Include="LauncherIcons.h" />
+    <ClInclude Include="NameDbUpdater.h" />
+    <ClInclude Include="Updater.h" />
+    <ClInclude Include="ImGuiUpdates.h" />
+    <ClInclude Include="ImGuiLoadGamePanel.h" />
+    <ClInclude Include="ImGuiDialogs.h" />
+    <ClInclude Include="BlenderLauncher.h" />
+    <ClInclude Include="ImGuiBlender.h" />
+    <ClInclude Include="UiAsync.h" />
+    <ClInclude Include="IWDSoundDecoder.h" />
+    <ClInclude Include="GameVanguard.h" />
+    <ClInclude Include="GameWorldWar2.h" />
+    <ClInclude Include="IPAKCache.h" />
+    <ClInclude Include="IPAKSupport.h" />
+    <ClInclude Include="IWDCache.h" />
+    <ClInclude Include="IWDSupport.h" />
+    <ClInclude Include="PAKCache.h" />
+    <ClInclude Include="PAKSupport.h" />
+    <ClInclude Include="Parasyte.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="SABCache.h" />
+    <ClInclude Include="SABSupport.h" />
+    <ClInclude Include="Siren.h" />
+    <ClInclude Include="WinFileSystem.h" />
+    <ClInclude Include="XPAKCache.h" />
+    <ClInclude Include="XPAKSupport.h" />
+    <ClInclude Include="XPTOCCache.h" />
+    <ClInclude Include="XSUBCache.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GrayWolf.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="..\..\Core\Resources\CheckMarkIcon.ico" />
+    <Image Include="..\Resources\GrayWolf.ico" />
+    <Image Include="..\Resources\SettingHover.png" />
+    <Image Include="..\Resources\SettingNormal.png" />
+    <Image Include="..\Resources\SettingSelect.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="cpp.hint" />
+  </ItemGroup>
+  <ItemGroup>
+    <Manifest Include="GrayWolf.manifest" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+  <!-- Build OpenAssetTools' static libs from the vendored submodule before we
+       compile/link, so the in-process OAT integration needs NO prebuilt binaries
+       committed to git. Idempotent: tools\build-oat.ps1 no-ops once the libs
+       exist, so this only pays the one-time build cost on a fresh checkout. -->
+  <Target Name="BuildOat" BeforeTargets="PrepareForBuild"
+          Condition="!Exists('$(MSBuildProjectDirectory)\..\..\External\OpenAssetTools\build\lib\Release_x64\ObjWriting.lib')">
+    <Message Importance="high" Text="OpenAssetTools libs not found - building them from the submodule (one-time, several minutes)..." />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\..\tools\build-oat.ps1&quot;" />
+  </Target>
+  <!-- Ship the zonekit profiles (reader tables per game) next to the exe: zone-walk finds
+       them at <exe dir>\zonekit\profiles\<game>, the material adapters its shading.txt, the gdt kind
+       its gdt\<type>\ folders (Gdt.h), Cold War its strings.cipher.txt (Games\T9\StringCipher.h). -->
+  <Target Name="CopyZonekitProfiles" AfterTargets="Build">
+    <ItemGroup>
+      <ZonekitProfile Include="$(MSBuildProjectDirectory)\..\..\..\zonekit\profiles\**\profile.json;$(MSBuildProjectDirectory)\..\..\..\zonekit\profiles\**\types.json;$(MSBuildProjectDirectory)\..\..\..\zonekit\profiles\**\tables.*.txt;$(MSBuildProjectDirectory)\..\..\..\zonekit\profiles\**\blocks.txt;$(MSBuildProjectDirectory)\..\..\..\zonekit\profiles\**\empties.txt;$(MSBuildProjectDirectory)\..\..\..\zonekit\profiles\**\shading.txt;$(MSBuildProjectDirectory)\..\..\..\zonekit\profiles\**\strings.cipher.txt;$(MSBuildProjectDirectory)\..\..\..\zonekit\profiles\**\names.wni;$(MSBuildProjectDirectory)\..\..\..\zonekit\profiles\**\gdt\**\*.json;$(MSBuildProjectDirectory)\..\..\..\zonekit\profiles\**\gdt\**\*.jsonc" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ZonekitProfile)" DestinationFiles="@(ZonekitProfile->'$(OutDir)zonekit\profiles\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

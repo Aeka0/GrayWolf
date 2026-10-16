@@ -1,0 +1,12 @@
+#include "stdafx.h"
+
+#include "Games/GameModule.h"
+
+// <Title>'s fast files: magic and version (FastFile::Identify prints them), and how far its disk
+// support has got (Container: decompresses; List: asset list read; Assets: exports).
+namespace
+{
+    const GameModuleRegistration Registered{
+        { "<ENGINE>", "<Title>", "<exe>", "<magic>", 0, GameSupportStage::Container },
+    };
+}

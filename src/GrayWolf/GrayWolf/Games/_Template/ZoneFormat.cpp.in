@@ -1,0 +1,31 @@
+#include "stdafx.h"
+
+#include "ZoneFormat.h"
+
+// <Title>: how a decompressed zone begins (header, string table, asset list) and where the first
+// asset loads. Games/IW6/ZoneFormat.cpp and Games/T8/ZoneFormat.cpp are complete examples.
+namespace
+{
+    class GameZoneFormat final : public ZoneTables::IZoneFormat
+    {
+    public:
+        const char* Name() const override { return "<fmt>"; }   // the profile's "zone_format"
+
+        ZoneTables::ZoneHead Read(const std::vector<uint8_t>& Buf, const ZoneTables::StreamRules& Rules) const override
+        {
+            const ZoneTables::HeaderReader H(Buf);
+            ZoneTables::ZoneHead Z;
+            // 1. the header fields (string count/pointer, asset count/pointer)
+            // 2. the inline strings (Rules.Marker slots, H.SkipStringSlots)
+            // 3. the asset array: Z.Assets.push_back({ type, header pointer })
+            // 4. Z.BodyStart: where the first asset's data starts
+            // 5. Z.Start: the start block's cursor when the first asset loads (from the emulated
+            //    loader, checked on every recorded zone)
+            throw std::runtime_error("<fmt> zone header not written yet");
+            return Z;
+        }
+    };
+
+    const GameZoneFormat Format;
+    const ZoneTables::ZoneFormatRegistration Registered(Format);
+}

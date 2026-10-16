@@ -1,0 +1,8 @@
+# Actions whose allocation aligns the block cursor even when the count is 0, proven from the
+# machine code; merged into empties.txt when it is generated (too rare to win the vote).
+# menuDef (0x9de40) +0x1a0: 0x9e3a1 tests the pointer != 0, then 0x9e3be aligns to 4 before count x 16
+f9de40|19
+# stringtable (0x96f20) +0x10: 0x96fa0 tests the values pointer != 0, then 0x96fba aligns to 4
+stringtable|2
+# menufile (0x95770) +0x10: 0x957f0 tests the menus pointer != 0, then aligns to 4 (0x957fc) before count x 8
+menufile|2

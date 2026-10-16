@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# .githooks/pre-commit - fast, staged-files-only static analysis, blocking on real errors only.
+#
+# Scope is deliberately narrow so this stays commit-speed, not a substitute for the full opt-in
+# sweeps (tools/run_cppcheck.sh, tools/run_analyze.sh, tools/run_clang_tidy.py):
+#   - Only the C/C++ files actually staged in THIS commit are scanned (not the whole tree).
+#   - Only cppcheck runs here, and only its default "error" severity class blocks the commit
+#     (real bugs: null derefs, buffer overflows, use-after-free, etc.) - the broader
+#     warning/performance/portability categories tools/run_cppcheck.sh also enables are still
+#     printed for visibility but do NOT block, since this codebase has a real pre-existing
+#     backlog in those softer categories (~400-500 findings project-wide, confirmed 2026-08-31)
+#     that a hard per-commit gate on unrelated pre-existing code would make unusable immediately.
+#   - clang-tidy runs too (via tools/run_clang_tidy.py, staged-files mode) but is informational
+#     only, never blocking, for the same reason (215 findings on just a 3-file sample at setup
+#     time) - it also has a known, confirmed limitation (files that transitively include
+#     resource.h fail to parse under clang - MSVC's cl.exe handles that encoding, clang's
+#     frontend doesn't) that would otherwise produce confusing spurious failures on files like
+#     Main.cpp.
+#   - MSVC /analyze is NOT run here at all - it requires an actual MSBuild rebuild pass (multiple
+#     minutes even scoped), fundamentally incompatible with a fast pre-commit hook. Run it
+#     manually (tools/run_analyze.sh) before a release, not per-commit.
+#
+# One-time setup on a fresh clone (this repo does not use core.hooksPath by default):
+#   git config core.hooksPath .githooks
+#
+# To skip once (e.g. a WIP commit): git commit --no-verify
+
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# Staged, non-deleted files under the two real source trees.
+mapfile -t STAGED < <(git diff --cached --name-only --diff-filter=ACMR -- \
+    'src/GrayWolf/GrayWolf/*.cpp' 'src/GrayWolf/GrayWolf/*.h' \
+    'src/Core/Core/*.cpp' 'src/Core/Core/*.h')
+
+if [[ ${#STAGED[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+# Third-party code kept in the repo (same list as tools/run_cppcheck.sh): not ours to hold to
+# this project's own standard.
+VENDORED_RE='/fpng\.(cpp|h)$'
+
+FILES=()
+for f in "${STAGED[@]}"; do
+    [[ -f "$f" ]] || continue
+    [[ "$f" =~ $VENDORED_RE ]] && continue
+    FILES+=("$f")
+done
+
+if [[ ${#FILES[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+echo "pre-commit: fast static analysis on ${#FILES[@]} staged file(s)..."
+FAIL=0
+
+# ---- cppcheck: blocking on real ("error"-severity) findings only ----
+CPPCHECK="cppcheck"
+if ! command -v cppcheck >/dev/null 2>&1; then
+    if [[ -x "/c/Program Files/Cppcheck/cppcheck.exe" ]]; then
+        CPPCHECK="/c/Program Files/Cppcheck/cppcheck.exe"
+    else
+        CPPCHECK=""
+    fi
+fi
+
+if [[ -n "$CPPCHECK" ]]; then
+    # --language=c++ is required, not cosmetic: cppcheck guesses language from extension when
+    # given a bare .h file directly (rather than seeing it #include'd from a .cpp translation
+    # unit, the way tools/run_cppcheck.sh's whole-directory scan does) and defaults to C for
+    # headers - producing a spurious blocking "invalid C code" syntaxError on ordinary C++ (e.g.
+    # `std::string`). Confirmed directly against a real staged .h file before this was added.
+    CPPCHECK_OUT=$(timeout 60 "$CPPCHECK" \
+        --language=c++ \
+        --enable=warning,performance,portability \
+        --std=c++17 \
+        --platform=win64 \
+        --library=windows --library=mfc \
+        --suppressions-list="$REPO_ROOT/tools/cppcheck-suppressions.txt" \
+        "${FILES[@]}" 2>&1) || true
+
+    ERRORS=$(printf '%s\n' "$CPPCHECK_OUT" | grep -E ': error:' || true)
+    OTHER=$(printf '%s\n' "$CPPCHECK_OUT" | grep -E ': (warning|performance|portability|style): ' || true)
+
+    if [[ -n "$OTHER" ]]; then
+        echo ""
+        echo "cppcheck (non-blocking - warning/performance/portability):"
+        printf '%s\n' "$OTHER"
+    fi
+
+    if [[ -n "$ERRORS" ]]; then
+        echo ""
+        echo "cppcheck found real errors in staged files - fix (or suppress in"
+        echo "tools/cppcheck-suppressions.txt if confirmed false-positive) before committing:"
+        printf '%s\n' "$ERRORS"
+        FAIL=1
+    fi
+else
+    echo "pre-commit: cppcheck not found (install it and put it on PATH) - skipping."
+fi
+
+# ---- clang-tidy: informational only, never blocks ----
+# Only the GrayWolf/GrayWolf subset - tools/run_clang_tidy.py's compile_commands.json only
+# covers that project. Core/Core files are still covered by cppcheck above.
+CT_FILES=()
+for f in "${FILES[@]}"; do
+    if [[ "$f" == src/GrayWolf/GrayWolf/*.cpp ]]; then
+        CT_FILES+=("${f#src/GrayWolf/GrayWolf/}")
+    fi
+done
+
+# Cap clang-tidy to a handful of files - it's meaningfully slower per file than cppcheck (real
+# per-TU analysis, not a lint pass), and a big multi-file commit (a mechanical file-split refactor,
+# say) can push its total runtime well past what a per-commit hook should ever take. A hard 90s
+# timeout on top guarantees the hook can never hang the commit indefinitely regardless. Confirmed
+# necessary directly: an earlier version of this hook, tested against a real 13-file staged commit,
+# ran long enough to need killing. Large commits still get cppcheck's fast pass above in full; just
+# not clang-tidy - run tools/run_clang_tidy.py manually for those, or the full sweep before a release.
+CLANG_TIDY_FILE_CAP=6
+if [[ ${#CT_FILES[@]} -gt "$CLANG_TIDY_FILE_CAP" ]]; then
+    echo ""
+    echo "clang-tidy: skipped (${#CT_FILES[@]} staged files > $CLANG_TIDY_FILE_CAP cap for a fast hook - run tools/run_clang_tidy.py manually)."
+elif [[ ${#CT_FILES[@]} -gt 0 ]] && command -v python >/dev/null 2>&1; then
+    echo ""
+    echo "clang-tidy (informational only, .clang-tidy):"
+    timeout 90 python tools/run_clang_tidy.py "${CT_FILES[@]}" 2>&1 | tail -40 || true
+fi
+
+if [[ "$FAIL" -eq 1 ]]; then
+    echo ""
+    echo "pre-commit: blocked on real cppcheck error(s) above. Fix, or 'git commit --no-verify' to skip."
+    exit 1
+fi
+
+exit 0

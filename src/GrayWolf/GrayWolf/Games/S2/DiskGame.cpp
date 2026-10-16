@@ -1,0 +1,779 @@
+#include "stdafx.h"
+
+// WWII (S2) on the disk template: a ZonekitZone with the s2 profile, served to the live WWII
+// readers (GameWorldWar2). What is WWII's own: the LOD surfaces the game fills in at load time,
+// streamed images named by a hash in the .ff header and found through the imagefile*.toc, streamed
+// meshes through the xpakfile*.toc (XPTOCCache), and sounds through the aliases (soundfile*.pak).
+
+#include "CoDAssets.h"
+#include "DiskGame.h"
+#include "ExportWriters.h"
+#include "GameWorldWar2.h"
+#include "Games/IW/IWMaterialBooks.h"
+#include "Games/IW/IWPakSounds.h"
+#include "Games/IW/IWSoundAliases.h"
+#include "FileSystems.h"
+#include "Games/IW/IWZone.h"
+#include "PAKCache.h"
+#include "Strings.h"
+#include "XPTOCCache.h"
+
+#include <algorithm>
+#include <array>
+#include <filesystem>
+#include <format>
+#include <fstream>
+#include <mutex>
+#include <set>
+#include <tuple>
+#include <unordered_map>
+#include <unordered_set>
+
+namespace fs = std::filesystem;
+
+namespace
+{
+    // XModel (xmodel, 0x30) points at its XModelBase (0x378): six 0x50 LOD records from 0x88,
+    // the LOD count at 0x268, a LOD's surfaces at +0x48
+    constexpr int64_t ModelBaseAt = 8, LodCountAt = 0x268;
+    IWZone::LodLayout ModelLods()
+    {
+        IWZone::LodLayout L;
+        L.Owner = "xmodelbase";
+        L.Lods = 0x88, L.LodSize = 0x50, L.LodCount = LodCountAt, L.LodSurfs = 0x48;
+        return L;
+    }
+    constexpr int64_t CompositeFlags = 0x20;
+    // SoundAlias (sound, 0x20): its entries at 8, their count a u8 at 0x18; an entry (0x150)
+    // points at its file spec (0x40, the type a u8 at 0: 1 loaded, 2 primed, 3 streamed) at 0x28
+    constexpr int64_t AliasEntries = 8, AliasEntryCount = 0x18, AliasEntrySize = 0x150, EntrySpec = 0x28;
+    constexpr uint32_t CompositeFlag = 0x200;
+
+    // GfxImage (0x60): pixels at 0x20 (resident in the zone, or null when streamed), four mip
+    // records {u16 width, u16 height, u32} from 0x28, the format at 0x48 (GameWorldWar2::DxgiFormat),
+    // the resident size at 0x54, the map type at 0x58 (5: cube).
+    constexpr int64_t ImagePixels = 0x20, ImageMips = 0x28, ImageFormatAt = 0x48, ImageMapType = 0x58;
+    constexpr int Levels = 4;
+
+    // The .ff header's two tables, before the compressed zone: a u32 count at 0x20 and that many
+    // 16-byte entries {u64 key, u32, u32 flags}, then the same for sounds.
+    // Images: four entries per streamed image (levels 0 to 3, smallest first; all zero when the
+    // level is absent), in the order the zone loads its streamed images; the key is the first 8
+    // bytes of the image's 16-byte hash in the imagefile*.toc.
+    // Sounds: one entry {key, size, flags} per loaded sound and per primed or streamed file spec, in load
+    // order; flags bit 0 is a localized sound (the language folder's toc); an all-zero entry is a
+    // loaded sound whose bytes are in the zone. The zone leaves those buffers zeroed and the
+    // spec's pack fields empty: the game fills them in from the soundfile*.toc.
+    constexpr int64_t StreamTableAt = 0x20;
+    struct HeaderEntry
+    {
+        uint64_t Key = 0;
+        uint32_t Value = 0, Flags = 0;
+    };
+
+    std::vector<HeaderEntry> ReadHeaderTable(const std::string& FastFilePath, int Which)
+    {
+        std::vector<HeaderEntry> Out;
+        std::ifstream F(FastFilePath, std::ios::binary);
+        uint32_t Count = 0;
+        F.seekg(StreamTableAt);
+        for (int T = 0; T <= Which; T++)
+        {
+            F.read(reinterpret_cast<char*>(&Count), 4);
+            if (!F || Count > (1u << 22)) return Out;
+            if (T < Which) F.seekg((std::streamoff)Count * 16, std::ios::cur);
+        }
+        Out.resize(Count);
+        static_assert(sizeof(HeaderEntry) == 16, "16-byte entries");
+        F.read(reinterpret_cast<char*>(Out.data()), (std::streamsize)Count * 16);
+        if (!F) Out.clear();
+        return Out;
+    }
+
+    // imagefile*.toc: "S2ffi100", u32 version, u32 hash size, u32 count, then 72-byte entries:
+    // the 16-byte hash and four levels {u64 offset, u32 size, u16 pak} into imagefile<pak>.pak.
+    // The DLC tocs (imagefile4/5/6) repeat some images in their own paks.
+    struct PakLevel
+    {
+        uint64_t Offset = 0;
+        uint32_t Size = 0;
+        uint16_t Pak = 0;
+    };
+    using ImageLevels = std::array<PakLevel, Levels>;
+
+    // soundfile*.toc: "S2ffi200", u32 version, u32 count, then 30-byte entries: the 16-byte hash,
+    // u64 offset, u32 size, u16 pak into soundfile<pak>.pak (raw FLAC); a language folder has its
+    // own, prefixed (french/fra_soundfile.toc)
+    struct SoundEntry
+    {
+        uint64_t Offset = 0;
+        uint32_t Size = 0;
+        uint16_t Pak = 0;
+    };
+
+    void ReadSoundToc(const fs::path& Path, std::unordered_map<uint64_t, SoundEntry>& Out)
+    {
+        std::ifstream F(Path, std::ios::binary);
+        char Magic[8]{};
+        uint32_t Head[2]{};
+        F.read(Magic, 8);
+        F.read(reinterpret_cast<char*>(Head), sizeof(Head));
+        if (!F || std::memcmp(Magic, "S2ffi200", 8) != 0) return;
+        std::vector<uint8_t> Raw((size_t)Head[1] * 30);
+        F.read(reinterpret_cast<char*>(Raw.data()), (std::streamsize)Raw.size());
+        if (!F) return;
+        for (uint32_t K = 0; K < Head[1]; K++)
+        {
+            const uint8_t* E = Raw.data() + (size_t)K * 30;
+            uint64_t Key = 0;
+            SoundEntry S;
+            std::memcpy(&Key, E, 8);
+            std::memcpy(&S.Offset, E + 16, 8);
+            std::memcpy(&S.Size, E + 24, 4);
+            std::memcpy(&S.Pak, E + 28, 2);
+            Out.emplace(Key, S);
+        }
+    }
+
+    struct InstallPackages
+    {
+        std::string Root;
+        std::unordered_multimap<uint64_t, ImageLevels> Images;
+        std::unordered_map<uint64_t, SoundEntry> SoundFiles, LocalizedSoundFiles;
+        std::unique_ptr<XPTOCCache> Meshes;
+        std::unique_ptr<PAKCache> Sounds;
+    };
+
+    void ReadImageToc(const fs::path& Path, std::unordered_multimap<uint64_t, ImageLevels>& Out)
+    {
+        std::ifstream F(Path, std::ios::binary);
+        char Magic[8]{};
+        uint32_t Head[3]{};
+        F.read(Magic, 8);
+        F.read(reinterpret_cast<char*>(Head), sizeof(Head));
+        if (!F || std::memcmp(Magic, "S2ffi100", 8) != 0 || Head[1] != 16) return;
+        std::vector<uint8_t> Raw((size_t)Head[2] * 72);
+        F.read(reinterpret_cast<char*>(Raw.data()), (std::streamsize)Raw.size());
+        if (!F) return;
+        for (uint32_t K = 0; K < Head[2]; K++)
+        {
+            const uint8_t* E = Raw.data() + (size_t)K * 72;
+            uint64_t Key = 0;
+            std::memcpy(&Key, E, 8);
+            ImageLevels L;
+            for (int J = 0; J < Levels; J++)
+            {
+                std::memcpy(&L[J].Offset, E + 16 + J * 14, 8);
+                std::memcpy(&L[J].Size, E + 24 + J * 14, 4);
+                std::memcpy(&L[J].Pak, E + 28 + J * 14, 2);
+            }
+            Out.emplace(Key, L);
+        }
+    }
+
+    // The install a zone belongs to: its folder or a parent (localized zones are in a language
+    // folder), the one holding xpakfile.toc
+    std::string InstallOf(const std::string& FastFilePath)
+    {
+        for (fs::path P = fs::path(FastFilePath).parent_path(); !P.empty(); P = P.parent_path())
+        {
+            std::error_code Ec;
+            if (fs::exists(P / "xpakfile.toc", Ec)) return P.string();
+            if (P == P.root_path()) break;
+        }
+        return fs::path(FastFilePath).parent_path().string();
+    }
+
+    // The install's packages, read once per install for the run: the tocs are tens of MB
+    InstallPackages& PackagesFor(const std::string& FastFilePath)
+    {
+        static std::mutex Lock;
+        static std::unique_ptr<InstallPackages> Cached;
+        std::lock_guard<std::mutex> Guard(Lock);
+        const std::string Root = InstallOf(FastFilePath);
+        if (!Cached || Cached->Root != Root)
+        {
+            auto P = std::make_unique<InstallPackages>();
+            P->Root = Root;
+            std::error_code Ec;
+            for (const auto& E : fs::directory_iterator(Root, Ec))
+            {
+                const std::string N = Strings::ToLower(E.path().filename().string());
+                if (N.rfind("imagefile", 0) == 0 && E.path().extension() == ".toc") ReadImageToc(E.path(), P->Images);
+                if (N.rfind("soundfile", 0) == 0 && E.path().extension() == ".toc") ReadSoundToc(E.path(), P->SoundFiles);
+                // a language folder: its <prefix>soundfile*.toc
+                if (E.is_directory(Ec))
+                    for (const auto& L : fs::directory_iterator(E.path(), Ec))
+                    {
+                        const std::string Ln = Strings::ToLower(L.path().filename().string());
+                        if (Ln.find("soundfile") != std::string::npos && L.path().extension() == ".toc") ReadSoundToc(L.path(), P->LocalizedSoundFiles);
+                    }
+            }
+            P->Meshes = std::make_unique<XPTOCCache>();
+            P->Meshes->LoadPackageCache(Root);   // xpakfile.toc
+            for (const char* Dlc : { "xpakfile4.toc", "xpakfile5.toc", "xpakfile6.toc" })
+                if (fs::exists(fs::path(Root) / Dlc, Ec)) P->Meshes->LoadPackage((fs::path(Root) / Dlc).string());
+            P->Sounds = std::make_unique<PAKCache>();
+            P->Sounds->LoadPackageCache(Root);
+            Cached = std::move(P);
+        }
+        return *Cached;
+    }
+
+    // A name-only material header names a material of the install's common zones (common*,
+    // code_pre_gfx*, code_post_gfx* and their patch_ zones), which the game loads first. Material
+    // (0x168): image count u8 0xa2, image table at 0xc0; an image's name at 0.
+    IWMaterialBooks::Layout MaterialLayout()
+    {
+        IWMaterialBooks::Layout L;
+        L.Profile = "s2";
+        L.ImageCount = 0xa2, L.Images = 0xc0, L.ImageName = 0;
+        return L;
+    }
+    constexpr const char* CommonZones = "(patch_)?(common|code_pre_gfx|code_post_gfx)(_[a-z0-9_]+)?[.]ff";
+
+    class WW2Zone final : public IWZone
+    {
+    public:
+        WW2Zone(const std::string& Path, std::string CacheDir)
+            : IWZone(Path), Books(MaterialLayout(), std::move(CacheDir), [Path] { return IWMaterialBooks::ZonesMatching(InstallOf(Path), CommonZones); })
+        {
+            using namespace DiskGame;
+            // the live model and anim readers, with the install's packages
+            for (Kind K : { Kind::Model, Kind::Anim })
+                Exports(K, [this, Base = *ExporterOf(K)](const Context& C, Totals& T) {
+                    const IWPakSounds::PackagesInUse Using(Packages().Meshes.get());
+                    Base(C, T);
+                });
+            Exports(Kind::Image, [this](const Context& C, Totals& T) { ExportImages(C, T); });
+            Exports(Kind::Sound, [this](const Context& C, Totals& T) { ExportSounds(C, T); });
+            Exports(Kind::Map, [this](const Context& C, Totals& T) {
+                const IWPakSounds::PackagesInUse Using(Packages().Meshes.get());
+                ExportMap(C, T);
+            });
+            ExportsScriptFiles(Scripts::GscToolBin("s2"));
+            ExportsIwRawfiles();
+            ExportsIwStringTables();
+        }
+        ~WW2Zone() override
+        {
+            if (IsServed()) GameWorldWar2::ImagesElsewhere = nullptr;
+        }
+
+        // the material headers the common zones' book filled, and those it did not
+        void Measures(DiskGame::Totals& T) const override
+        {
+            ZonekitZone::Measures(T);
+            Books.Measure(T, "materials_from_common", "materials_in_no_common_zone");
+        }
+
+    protected:
+        const char* Profile() const override { return "s2"; }
+        const ICoDGame& LiveGame() const override { return LiveGames::Get("S2"); }
+        VirtualGameSession::Handlers Handlers() override { return { SlotString, DiskImage }; }
+        // a back reference to an asset names its slot in the asset list, which the loader points
+        // at the pooled asset (resolve_deref)
+        bool DerefAssetPointers() const override { return true; }
+        void Fixups() override;
+        void Served(bool On) override
+        {
+            if (!On)
+            {
+                GameWorldWar2::ImagesElsewhere = nullptr;
+                return;
+            }
+            GameWorldWar2::ImagesElsewhere = [this](const std::string& Name, IWMaterialBooks::ImageList& Out) { return Books.Find(Name, Out); };
+        }
+        void Defines(std::vector<DiskGame::AssetId>& Out) const override;
+        bool ReadMap(Maps::MapScene& Scene, std::map<std::string, uint64_t>& Models) override;
+        // a model whose XModelBase is not in this zone, or is a name-only header (",name", no
+        // LOD): another zone defines it whole
+        bool IsReference(DiskGame::Kind K, const std::string& Nm, int64_t Pos) const override
+        {
+            if (K == DiskGame::Kind::Model)
+            {
+                const int64_t Base = Off(At<uint64_t>(Image(), Pos + ModelBaseAt));
+                if (!Bases.count(Base) || At<uint8_t>(Image(), Base + LodCountAt) == 0) return true;
+            }
+            return ZonekitZone::IsReference(K, Nm, Pos);
+        }
+        // what Defines lists depends on this reader too, not only on the tables
+        std::string IndexKey() const override { return ZonekitZone::IndexKey() + "+s2.2"; }
+        // A composite model (flag 0x200 at 0x20) holds a list of its part models at 8 instead of
+        // an XModelBase: the parts are models of their own, the composite is not written
+        const char* Unwritable(DiskGame::Kind K, int64_t Pos) const override
+        {
+            return K == DiskGame::Kind::Model && (At<uint32_t>(Zone(), Pos + CompositeFlags) & CompositeFlag) ? "models_composite" : nullptr;
+        }
+
+    private:
+        static std::unique_ptr<XImageDDS> DiskImage(const XImage_t& Image);
+
+        InstallPackages& Packages() const { return PackagesFor(FastFilePath()); }
+        bool Resident(int64_t Pos) const;
+        // the image's largest level with data: its size and where it is
+        bool Largest(int64_t Pos, uint32_t& Width, uint32_t& Height, PakLevel& Where, std::string& Pak) const;
+        std::unique_ptr<XImageDDS> Decode(int64_t Pos, ImageUsageType Usage);
+        void ExportImages(const DiskGame::Context& C, DiskGame::Totals& T);
+        void ExportSounds(const DiskGame::Context& C, DiskGame::Totals& T);
+        // the sound header table's entry of each loaded sound and primed or streamed file spec, by position
+        std::unordered_map<int64_t, HeaderEntry> SoundFiles();
+
+        std::unordered_map<int64_t, uint64_t> Streams;   // streamed image position -> its key
+        std::unordered_set<int64_t> Bases;               // the XModelBases walked here
+        bool NoPixelsCounted = false;
+        IWMaterialBooks::Lookup Books;
+    };
+
+    bool WW2Zone::Resident(int64_t Pos) const
+    {
+        const uint64_t Raw = At<uint64_t>(Zone(), Pos + ImagePixels);
+        return Raw == Rules().Marker || Raw == Rules().Resident;
+    }
+
+    bool WW2Zone::Largest(int64_t Pos, uint32_t& Width, uint32_t& Height, PakLevel& Where, std::string& Pak) const
+    {
+        const auto It = Streams.find(Pos);
+        if (It == Streams.end()) return false;
+        const auto& P = Packages();
+        const auto [First, Last] = P.Images.equal_range(It->second);
+        for (int L = Levels - 1; L >= 0; L--)
+        {
+            Width = At<uint16_t>(Image(), Pos + ImageMips + L * 8);
+            Height = At<uint16_t>(Image(), Pos + ImageMips + L * 8 + 2);
+            if (Width == 0 || Height == 0) continue;
+            // the first toc whose pak is here (the DLC tocs share images)
+            for (auto E = First; E != Last; ++E)
+            {
+                const PakLevel& Lv = E->second[(size_t)L];
+                if (Lv.Size == 0) continue;
+                const std::string Path = (fs::path(P.Root) / std::format("imagefile{}.pak", (unsigned)Lv.Pak)).string();
+                std::error_code Ec;
+                if (!fs::exists(Path, Ec)) continue;
+                Where = Lv;
+                Pak = Path;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::unique_ptr<XImageDDS> WW2Zone::Decode(int64_t Pos, ImageUsageType Usage)
+    {
+        const XImage_t Info(Usage, 0, Live().Addr((uint64_t)Pos), AssetName(DiskGame::Kind::Image, Pos));
+        // pixels resident in the zone, not in a .pak
+        if (Resident(Pos)) return GameWorldWar2::LoadResidentXImage(Info);
+        uint32_t Width = 0, Height = 0;
+        PakLevel Where;
+        std::string Pak;
+        if (!Largest(Pos, Width, Height, Where, Pak)) return nullptr;
+        return GameWorldWar2::DecodePakImage(Pak, Where.Offset, Width, Height, At<uint8_t>(Image(), Pos + ImageFormatAt),
+                                             At<uint8_t>(Image(), Pos + ImageMapType) == 5, Usage);
+    }
+
+    std::unique_ptr<XImageDDS> WW2Zone::DiskImage(const XImage_t& Image)
+    {
+        WW2Zone* Current = ServedZone<WW2Zone>();
+        if (Current == nullptr || !Current->Live().Contains(Image.ImagePtr)) return nullptr;
+        return Current->Decode((int64_t)(Image.ImagePtr - Current->Live().Origin()), Image.ImageUsage);
+    }
+
+    void WW2Zone::Fixups()
+    {
+        Served(true);   // opened: the zone the handlers reach
+        // the script strings: count at 0, marker-tested slots from 0x28, then their text
+        const auto& Z = Zone();
+        const int32_t Count = At<int32_t>(Z, 0);
+        if (At<uint64_t>(Z, 8) != 0 && Count > 0 && (uint64_t)Count <= Z.size() / 8)
+            Slots = InlineStrings(Z, 0x28, (uint64_t)Count, 8, Rules().Marker);
+
+        for (const auto& I : Walk().Instances)
+            if (OwnerIs(I, "xmodelbase")) Bases.insert(I.Pos);
+        if (const size_t Unlinked = LinkLodSurfaces(ModelLods())) Counter("lod_surfaces_unresolved") += Unlinked;
+
+        // streamed images (no pixels here, some mip described; a ",name" header has neither), in
+        // walk order, take the stream table's keys four by four
+        std::vector<int64_t> Streamed;
+        for (const auto& I : Walk().Instances)
+        {
+            if (!OwnerIs(I, "image") || At<uint64_t>(Z, I.Pos + ImagePixels) != 0) continue;
+            bool Described = false;
+            for (int64_t K = 0; K < Levels * 8; K += 8) Described = Described || At<uint64_t>(Z, I.Pos + ImageMips + K) != 0;
+            if (Described) Streamed.push_back(I.Pos);
+        }
+        const std::vector<HeaderEntry> Keys = ReadHeaderTable(FastFilePath(), 0);
+        Counter("images_streamed") += Streamed.size();
+        if (Keys.size() == Streamed.size() * Levels)
+        {
+            for (size_t K = 0; K < Streamed.size(); K++)
+                for (int L = 0; L < Levels; L++)
+                    if (Keys[Levels * K + L].Key != 0)
+                    {
+                        Streams[Streamed[K]] = Keys[Levels * K + L].Key;
+                        break;
+                    }
+        }
+        else if (!Streamed.empty())
+            Counter("image_tables_mismatched")++;
+    }
+
+    void WW2Zone::ExportImages(const DiskGame::Context& C, DiskGame::Totals& T)
+    {
+        // the images with pixels: resident ones in walk order, then the streamed ones in pak order
+        std::vector<int64_t> Order;
+        std::vector<std::tuple<uint16_t, uint64_t, int64_t>> Paked;
+        size_t NoPixels = 0;
+        for (const auto& I : Walk().Instances)
+        {
+            if (!OwnerIs(I, "image")) continue;
+            if (Resident(I.Pos))
+            {
+                Order.push_back(I.Pos);
+                continue;
+            }
+            uint32_t W = 0, H = 0;
+            PakLevel Where;
+            std::string Pak;
+            if (Largest(I.Pos, W, H, Where, Pak)) Paked.emplace_back(Where.Pak, Where.Offset, I.Pos);
+            else if (!IsReference(DiskGame::Kind::Image, AssetName(DiskGame::Kind::Image, I.Pos), I.Pos)) NoPixels++;
+        }
+        std::sort(Paked.begin(), Paked.end());
+        for (const auto& P : Paked) Order.push_back(std::get<2>(P));
+        if (!NoPixelsCounted) Counter("images_without_pixels") += NoPixels;   // once, the kind runs for textures too
+        NoPixelsCounted = true;
+
+        ImageList L;
+        L.Order = std::move(Order);
+        // what the output file is made of: the pak level or the zone's pixels, the format and the
+        // extension
+        L.KeyOf = [this](int64_t Pos, const std::string& Extension) {
+            ExportWriters::ContentKey Key;
+            uint32_t W = 0, Ht = 0;
+            PakLevel Where;
+            std::string Pak;
+            if (Largest(Pos, W, Ht, Where, Pak))
+                Key.Mix(Where.Pak).Mix(Where.Offset).Mix(Pak);
+            else
+            {
+                // resident: the pixels themselves
+                const uint64_t Pixels = At<uint64_t>(Image(), Pos + ImagePixels);
+                const int64_t At0 = Off(Pixels);
+                const uint32_t Size = At<uint32_t>(Image(), Pos + 0x54);
+                if (At0 < 0 || At0 + (int64_t)Size > (int64_t)Image().size()) return (uint64_t)0;
+                for (uint32_t K = 0; K + 8 <= Size; K += 8) Key.Mix(At<uint64_t>(Image(), At0 + K));
+                Key.Mix(Size);
+            }
+            return Key.Mix(At<uint64_t>(Image(), Pos + ImageMips)).Mix(At<uint8_t>(Image(), Pos + ImageFormatAt)).Mix(Extension).Key();
+        };
+        // a normal map by its name; the sink's rebuilds (no name) as colour
+        L.Decode = [this](int64_t Pos, const std::string& Name) {
+            return Decode(Pos, (Name.find("_nml") != std::string::npos) ? ImageUsageType::NormalMap : ImageUsageType::DiffuseMap);
+        };
+        L.FailWhy = [this](int64_t Pos) { return std::format("format {}", (unsigned)At<uint8_t>(Image(), Pos + ImageFormatAt)); };
+        L.OnePerName = true;
+        ExportImageList(C, T, L);
+    }
+
+    void WW2Zone::Defines(std::vector<DiskGame::AssetId>& Out) const
+    {
+        ZonekitZone::Defines(Out);
+        for (const auto& I : Walk().Instances)
+        {
+            if (!OwnerIs(I, "image")) continue;
+            if (!Resident(I.Pos) && !Streams.count(I.Pos)) continue;
+            const std::string N = AssetName(DiskGame::Kind::Image, I.Pos);
+            if (!IsReference(DiskGame::Kind::Image, N, I.Pos)) Out.push_back({ DiskGame::Kind::Image, N });
+        }
+    }
+
+    // The level (the s2 tables): GfxWorld (gfx_map, 0x10c8) with GfxWorldDraw at 0xc0 (its u16
+    // indices: count 0x308, array 0x310) and GfxWorldDpvsStatic at 0xca8 (0x38-byte surfaces at
+    // +0x2f0: first vertex 4, vertex count u16 8, triangle count u16 0xa, first index 0x18, material
+    // 0x20; static models 0x80 each at +0x310, the model at 0x48), 96-byte brush models at 0xb50
+    // (count 0xb48); the vertices as streams in gfx_map_trzone (0x98: count 0xc, positions 0x10,
+    // colours 0x20, uvs 0x28, normals 0x38); ComWorld's primary lights 0xa8 each (count 0x10, array
+    // 0x18, the definition's name at 0xa0); col_map_mp's dynamic entities 0x78 each (counts 0x338,
+    // lists 0x340). The surfaces' fields and the static model's placement (origin 0, axis 12,
+    // scale 48) checked on mp_egypt_02_dogfight's records.
+    Maps::ClipLayout ClipBrushes(int64_t InfoAt);
+    Maps::TriggerLayout TriggerShapes();
+    IWZone::MapLayout Level()
+    {
+        IWZone::MapLayout M;
+        M.IndexCount = 0xc0 + 0x308, M.Indices = 0xc0 + 0x310;
+        M.VertexAsset = "gfx_map_trzone", M.VertexCount = 0xc;
+        M.Streams.Positions = 0x10, M.Streams.Colors = 0x20, M.Streams.Uvs = 0x28, M.Streams.Normals = 0x38;
+        M.BrushCount = 0xb48, M.Brushes = 0xb50, M.BrushSize = 96, M.BrushFirstSurface = 84, M.BrushSurfaceCount = 88;
+        M.SModelCount = 0xca8, M.Surfaces = 0xca8 + 0x2f0, M.SModels = 0xca8 + 0x310, M.SModelSize = 0x80, M.SModelModel = 0x48;
+        M.SurfaceSize = 0x38, M.SurfaceMaterial = 0x20, M.SurfaceFirstVertex = 4, M.SurfaceTris = 0xa, M.SurfaceBaseIndex = 0x18;
+        M.Clip = "col_map_mp", M.DynCounts = 0x338, M.DynLists = 0x340, M.DynSize = 0x78;
+        M.Lights.Count = 0x10, M.Lights.Array = 0x18, M.Lights.Size = 0xa8;
+        M.Lights.Color = 12, M.Lights.Dir = 28, M.Lights.Origin = 52, M.Lights.Radius = 88, M.Lights.CosHalfFov = 92, M.Lights.Def = 0xa0;
+        M.ImageNameAt = 0;
+        M.ClipBrushes = ClipBrushes(0x10);
+        M.ClipBrushes.ModelCount = 0x2e0, M.ClipBrushes.Models = 0x2e8;
+        M.Triggers = 0x18, M.TriggerShapes = TriggerShapes();
+        return M;
+    }
+
+    // The collision (the s2 tables): a ClipInfo (0x2a8)
+    // keeps planes, materials and leaf brush nodes; its first col_map_trzone pointer (0x228) the
+    // brushes (a table at 0x10), the collision triangles and their partitions (a vertex segment of
+    // 4096). cmodel_t 0x68: ClipInfo pointer 0x20, leafBrushNode 0x58.
+    Maps::ClipLayout ClipBrushes(int64_t InfoAt)
+    {
+        Maps::ClipLayout C;
+        C.InfoAt = InfoAt;
+        C.Info.PlaneCount = 0, C.Info.Planes = 8, C.Info.MaterialCount = 0x10, C.Info.Materials = 0x18;
+        C.Info.LeafBrushNodeCount = 0x20, C.Info.LeafBrushNodes = 0x28;
+        C.Tables = 0x228, C.TablesAt = 0x10;
+        C.Info.BrushCount = 0xc, C.Info.Brushes = 0x10, C.Info.BrushBounds = 0x18, C.Info.BrushContents = 0x20;
+        C.BrushContentsSize = 8;
+        C.MaterialSize = 0x18, C.MaterialName = 0, C.MaterialSurface = 8, C.MaterialContents = 0x10;
+        C.BrushSize = 0x18, C.BrushSides = 0, C.BrushSideCount = 8, C.BrushSideCountBytes = 4, C.AxialMaterial = 0xc;
+        C.SideSize = 8, C.SidePlane = 0, C.SidePlaneNumber = true, C.SideMaterial = 4, C.SideMaterialBytes = 4;
+        C.ModelSize = 0x68, C.ModelInfo = 0x20, C.ModelLeafBrushNode = 0x58;
+        C.NodeSize = 0x20, C.NodeCount = 4, C.NodeCountBytes = 4, C.NodeBrushes = 0x10, C.NodeBrushBytes = 4, C.NodeChildren = 0x18;
+        C.VertexCount = 0x38, C.Vertices = 0x40, C.TriangleCount = 0x48, C.Triangles = 0x50;
+        C.PartitionCount = 0x70, C.Partitions = 0x78, C.PartitionSize = 0x10, C.SegmentVertices = 4096;
+        return C;
+    }
+
+    // MapTriggers' records, widened: models 0x10 (hull count 8, first 0xa), hulls 0x28 (slabs 0x20, 0x22)
+    Maps::TriggerLayout TriggerShapes()
+    {
+        Maps::TriggerLayout T;
+        T.ModelSize = 0x10, T.ModelHullCount = 8, T.ModelFirstHull = 0xa;
+        T.HullSize = 0x28, T.HullContents = 0x18, T.HullSlabCount = 0x20, T.HullFirstSlab = 0x22;
+        return T;
+    }
+
+    // "?N" values of an entity string moved by Offset (an addon's trigger numbers are its own)
+    std::string ShiftTriggers(const std::string& Text, size_t Offset)
+    {
+        std::string Out;
+        for (size_t K = 0; K < Text.size(); K++)
+        {
+            Out += Text[K];
+            if (Text[K] != '"' || K + 2 >= Text.size() || Text[K + 1] != '?' || !std::isdigit((unsigned char)Text[K + 2])) continue;
+            size_t End = K + 2;
+            while (End < Text.size() && std::isdigit((unsigned char)Text[End])) End++;
+            if (End >= Text.size() || Text[End] != '"') continue;
+            Out += "?" + std::to_string(std::stoul(Text.substr(K + 2, End - K - 2)) + Offset);
+            K = End - 1;
+        }
+        return Out;
+    }
+
+    bool WW2Zone::ReadMap(Maps::MapScene& Scene, std::map<std::string, uint64_t>& Models)
+    {
+        if (!ReadLevel(Scene, Models, Level(), GameWorldWar2::ReadXMaterial)) return false;
+        // addon_map_ents (0x88): its entity string (8), MapTriggers (0x18, numbered from 0), a
+        // ClipInfo pointer (0x48) and the brush models it owns (count 0x50, array 0x58, numbered
+        // after the clip map's). Its triangles are in its models' space: counted, not placed.
+        const int64_t Addon = Root("addon_map_ents");
+        if (Addon < 0) return true;
+        Maps::ClipLayout L = ClipBrushes(0x48);
+        L.InfoPointer = true, L.ModelCount = 0x50, L.Models = 0x58, L.ModelNeedsInfo = true;
+        L.VertexCount = L.TriangleCount = -1;
+        Maps::Collision Own;
+        std::map<std::string, size_t> Unread;
+        const Maps::ClipSource Src = ClipSource();
+        Maps::ReadCollision(Own, Src, Addon, L, Unread);
+        for (const auto& [Key, N] : Unread) Counter("map_addon_" + Key) += N;
+        Maps::ReadTriggers(Own, Src, Addon + 0x18, TriggerShapes());
+        Maps::Collision& C = Scene.Collision;
+        C.ClipBrushes += Own.ClipBrushes;
+        for (auto& B : Own.Brushes) C.Brushes.push_back(std::move(B));
+        if (Own.Models.size() > C.Models.size()) C.Models.resize(Own.Models.size());
+        for (size_t M = 1; M < Own.Models.size(); M++)
+        {
+            if (Own.Models[M].empty()) continue;
+            if (!C.Models[M].empty()) Counter("map_addon_models_taken")++;
+            else C.Models[M] = std::move(Own.Models[M]);
+        }
+        for (auto& Mat : Own.Materials) C.Materials.push_back(std::move(Mat));
+        const size_t First = C.Triggers.size();
+        for (auto& T : Own.Triggers) C.Triggers.push_back(std::move(T));
+        const std::string Ents = StringAt(PointerAt(Addon + 8));
+        if (!Ents.empty()) Scene.MapEnts += "\n" + ShiftTriggers(Ents, First);
+        const int64_t Info = Off(PointerAt(Addon + 0x48));
+        const int64_t Trzone = Info >= 0 ? Off(PointerAt(Info + 0x228)) : -1;
+        if (Trzone >= 0) Counter("map_addon_triangles_unplaced") += At<uint32_t>(Image(), Trzone + 0x48);
+        return true;
+    }
+
+    std::unordered_map<int64_t, HeaderEntry> WW2Zone::SoundFiles()
+    {
+        // the zone's loaded sounds and primed or streamed file specs, in load (stream) order
+        std::vector<int64_t> Order;
+        for (const auto& I : Walk().Instances)
+        {
+            if (OwnerIs(I, "loaded_sound"))
+            {
+                Order.push_back(I.Pos);
+                continue;
+            }
+            if (!OwnerIs(I, "sound")) continue;
+            const int64_t Entries = Off(At<uint64_t>(Image(), I.Pos + AliasEntries));
+            const uint32_t Count = At<uint8_t>(Image(), I.Pos + AliasEntryCount);
+            for (uint32_t K = 0; Entries >= 0 && K < Count; K++)
+            {
+                const int64_t Spec = Off(At<uint64_t>(Image(), Entries + (int64_t)K * AliasEntrySize + EntrySpec));
+                if (Spec < 0) continue;
+                const uint8_t Type = At<uint8_t>(Image(), Spec);
+                Counter(std::format("sound_specs_type{}", (unsigned)Type))++;
+                if (Type == 2 || Type == 3) Order.push_back(Spec);
+            }
+        }
+        std::sort(Order.begin(), Order.end());
+        Order.erase(std::unique(Order.begin(), Order.end()), Order.end());
+        std::unordered_map<int64_t, HeaderEntry> Out;
+        const std::vector<HeaderEntry> Table = ReadHeaderTable(FastFilePath(), 1);
+        if (Table.size() != Order.size())
+        {
+            if (!Order.empty()) Counter("sound_tables_mismatched")++;
+            return Out;
+        }
+        for (size_t K = 0; K < Order.size(); K++) Out[Order[K]] = Table[K];
+        return Out;
+    }
+
+    // snd_alias_t (0x150): strings at 0, 8, 0x10, 0x18, 0x20, 0x30 and the SoundFile at 0x28 (the s2
+    // tables); the list's count a byte at 0x18. No public layout: the rest is measured on mp_airship's
+    // 6617 variants (their values and ranges, in the order IW keeps them): volumes 0x48/0x4c (linear,
+    // 0..2), pitches 0x54/0x58 (ratios 0.8..1.1), distances 0x5c/0x60 (10..1000, 350..3000), flags
+    // 0x68 (bit 0 set on the 22 ambient beds only: looping)
+    IWSoundAliases::Layout AliasLayout()
+    {
+        IWSoundAliases::Layout L;
+        L.ListCount = 0x18, L.ListCountBytes = 1, L.Size = 0x150;
+        L.Subtitle = 8, L.Secondary = 0x10, L.SoundFile = 0x28, L.VolMin = 0x48, L.VolMax = 0x4c, L.PitchMin = 0x54, L.PitchMax = 0x58;
+        L.DistMin = 0x5c, L.DistMax = 0x60, L.Flags = 0x68;
+        return L;
+    }
+
+    // How AddAliasSounds names a variant's file (GameWorldWar2.cpp), lower case (OnePerName): the
+    // SoundFile {u8 type, u8 exists, then at 8} names a loaded sound by its LoadedSound's name (a
+    // pointer at 8), a primed one by the name at 0x18, a streamed one by the name at 0x20
+    std::string LiveFileName(const SoundAliasCsv::ZoneView& Z, int64_t File)
+    {
+        if (File < 0 || Z.At<uint8_t>(File + 1) == 0) return std::string();
+        std::string S;
+        switch (Z.At<uint8_t>(File))
+        {
+        case 1: {
+            const int64_t Loaded = Z.Follow(File + 8);
+            if (Loaded >= 0) S = FileSystems::GetFileName(Z.Text(Loaded));
+            break;
+        }
+        case 2: S = Z.Text(File + 0x18); break;
+        case 3: S = Z.Text(File + 0x20); break;
+        default: break;
+        }
+        return Strings::ToLower(ExportNaming::SafeFileName(S));
+    }
+
+    void WW2Zone::ExportSounds(const DiskGame::Context& C, DiskGame::Totals& T)
+    {
+        // every alias's file specs, through the live reader: loaded sounds are in the zone,
+        // primed and streamed ones in soundfile<N>.pak (a language folder when localized)
+        std::set<uint64_t> Unique;
+        std::vector<CoDAsset_t*> Found;
+        std::vector<uint64_t> Sources;
+        std::vector<std::pair<int64_t, std::string>> Lists;
+        for (const auto& I : Walk().Instances)
+        {
+            if (!OwnerIs(I, "sound")) continue;
+            const std::string AliasName = AssetName(DiskGame::Kind::Sound, I.Pos);
+            if (IsReference(DiskGame::Kind::Sound, AliasName, I.Pos)) continue;
+            const auto Alias = CoDAssets::GameInstance->Read<WWIISoundAlias>(Live().Addr((uint64_t)I.Pos));
+            GameWorldWar2::AddAliasSounds(Alias, Unique, Found, &Sources);
+            Lists.emplace_back(I.Pos, AliasName);
+        }
+        // where each sound's bytes are: the soundfile pak the header table names, else the zone
+        const auto Files = SoundFiles();
+        const auto& P = Packages();
+        for (size_t N = 0; N < Found.size(); N++)
+        {
+            const auto It = Files.find(Off(Sources[N]));
+            if (It == Files.end() || It->second.Key == 0) continue;
+            const auto& Toc = (It->second.Flags & 1) ? P.LocalizedSoundFiles : P.SoundFiles;
+            const auto Entry = Toc.find(It->second.Key);
+            if (Entry == Toc.end())
+            {
+                Counter("sounds_not_in_toc")++;
+                continue;
+            }
+            auto* Sound = static_cast<CoDSound_t*>(Found[N]);
+            Sound->IsFileEntry = true;
+            Sound->IsLocalized = (It->second.Flags & 1) != 0;
+            Sound->PackageIndex = Entry->second.Pak;
+            Sound->AssetPointer = Entry->second.Offset;
+            Sound->AssetSize = Entry->second.Size;
+        }
+        IWPakSounds::WriteOptions Options;
+        Options.OnePerName = true;
+        IWPakSounds::Write(Found, Packages().Sounds.get(), C, T, Name(), [this](const std::string& N) -> size_t& { return Counter(N); }, Options);
+        if (!SoundAliasCsv::Wanted(C)) return;
+        const SoundAliasCsv::ZoneView Z = AliasView();
+        const IWSoundAliases::Layout L = AliasLayout();
+        SoundAliasCsv::Rows Rows;
+        const std::string Extension = IWPakSounds::Extension();
+        const auto File = [&](const std::string&, uint32_t, int64_t At) {
+            const std::string S = LiveFileName(Z, At);
+            return S.empty() ? S : S + Extension;
+        };
+        for (const auto& [Pos, AliasName] : Lists) IWSoundAliases::Read(Z, Pos, AliasName, L, File, Rows);
+        SoundAliasCsv::Write(C, T, Name(), Rows);
+    }
+
+    class WW2Game final : public DiskGame::IDiskGame
+    {
+    public:
+        const char* Id() const override { return "ww2"; }
+        const char* Title() const override { return "Call of Duty: WWII"; }
+        const char* Engine() const override { return "S2"; }
+        std::unique_ptr<DiskGame::IDiskZone> Unopened() const override { return std::make_unique<WW2Zone>(std::string(), std::string()); }
+        // the rich presence strings, the language's own (fra_) after the install's: PRESENCE_MP_,
+        // a DLC's or a store pack's (mp_wolfslair DLC1_ "Valkyrie", mp_house MTX5_), the campaign
+        // by PRESENCE_SP_ (hill "Hill 493"); a map's version or variant suffix (mp_aachen_v2,
+        // mp_carentan_s2, mp_wolfslair_free) is not in its key
+        const LevelNaming* LevelNames() const override
+        {
+            static const LevelNaming Naming = [] {
+                const auto Presence = [](const std::string& Map) {
+                    std::vector<std::string> Keys;
+                    for (const char* Pack : { "", "DLC1_", "DLC2_", "DLC3_", "DLC4_", "MTX1_", "MTX3_5_", "MTX5_", "MTX7_" })
+                        Keys.push_back(std::string("PRESENCE_") + Pack + Map);
+                    return Keys;
+                };
+                LevelNaming N;
+                N.From = { "code_post_gfx", "code_post_gfx_mp", "code_post_gfx_zm_mp", "???_code_post_gfx", "???_code_post_gfx_mp",
+                           "???_code_post_gfx_zm_mp" };
+                N.Keys = { { "mp_*_s2_winter", Presence("MP_{REST}_WINTER") },
+                           { "mp_*_v2", Presence("MP_{REST}") },
+                           { "mp_*_s2", Presence("MP_{REST}") },
+                           { "mp_*_free", Presence("MP_{REST}") },
+                           { "mp_*_slim", Presence("MP_{REST}") },
+                           { "mp_*", Presence("{NAME}") },
+                           { "*", { "PRESENCE_SP_{NAME}" } } };
+                N.Keys[5].second.push_back("MPUI_{REST}");
+                return N;
+            }();
+            return &Naming;
+        }
+
+        std::unique_ptr<DiskGame::IDiskZone> Open(const std::string& Path, const DiskGame::ExportOptions& Options, std::string& Error) const override
+        {
+            // the common zones' material book is kept under --cache, a temp folder by default
+            const std::string Cache = !Options.Cache.empty() ? Options.Cache : (fs::temp_directory_path() / "greyhound_ww2").string();
+            auto Zone = std::make_unique<WW2Zone>(Path, (fs::path(Cache) / "ww2_materials").string());
+            if (!Zone->Open(Error)) return nullptr;
+            return Zone;
+        }
+    };
+
+    const WW2Game Game;
+    const DiskGame::Registration Registered(Game);
+}

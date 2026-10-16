@@ -1,0 +1,23 @@
+# Generated from the game's pixel shaders - do not hand edit.
+# technique set|recipe|key=value... (MaterialDescription.h)
+mc/lit_backlit_micro_tile_blend#e6142445|layers|baseNormalHeight=160|colorTint=208|colorTint1=224|detailScale1=80|detailScale2=96|detailScaleHeight1=200|detailScaleHeight2=204|glossRange=164|glossRange2=240|mask_channel=r|mixScale=192|rotateUVs1=248|rotateUVs2=252|technique=3
+mc/lit_backlit_micro_tile_blend_plus#e6142445|layers|baseNormalHeight=160|colorTint=208|colorTint1=224|detailScale1=80|detailScale2=96|detailScaleHeight1=200|detailScaleHeight2=204|glossRange=164|glossRange2=240|mask_channel=r|mixScale=192|rotateUVs1=248|rotateUVs2=252|technique=3
+mc/lit_micro_tile_blend#e6142445|layers|baseNormalHeight=160|colorTint=192|colorTint1=208|detailScale1=80|detailScale2=96|detailScaleHeight1=184|detailScaleHeight2=188|glossRange=164|glossRange2=224|mask_channel=r|mixScale=176|rotateUVs1=232|rotateUVs2=236|technique=3
+mc/lit_micro_tile_blend_advanced#e6142445|layers|baseNormalHeight=172|colorTint=208|colorTint1=224|detailScale1=80|detailScale2=96|detailScaleHeight1=192|detailScaleHeight2=196|glossRange=176|glossRange2=240|mask_channel=r|mixScale=184|rotateUVs1=248|rotateUVs2=252|technique=3
+mc/lit_micro_tile_blend_plus#e6142445|layers|baseNormalHeight=160|colorTint=192|colorTint1=208|detailScale1=80|detailScale2=96|detailScaleHeight1=184|detailScaleHeight2=188|glossRange=164|glossRange2=224|mask_channel=r|mixScale=176|rotateUVs1=232|rotateUVs2=236|technique=3
+mc/lit_micro_tile_mix_globaltint#e6142445|layers|baseNormalHeight=160|colorTint=192|colorTint1=208|detailScale1=80|detailScale2=96|detailScaleHeight1=184|detailScaleHeight2=188|glossRange=164|glossRange2=224|mask_channel=r|mixScale=176|rotateUVs1=232|rotateUVs2=236|technique=3
+mc/lit_micro_tile_mix_globaltint_plus#e6142445|layers|baseNormalHeight=160|colorTint=192|colorTint1=208|detailScale1=80|detailScale2=96|detailScaleHeight1=184|detailScaleHeight2=188|glossRange=164|glossRange2=224|mask_channel=r|mixScale=176|rotateUVs1=232|rotateUVs2=236|technique=3
+mc/lit_transparent_backlit_advanced#e6142445|backlit|backlight_color=208|backlit_technique=6|thickness_channel=r
+mc/lit_transparent_backlit_reveal#e6142445|backlit+reveal|backlight_color=208|backlit_technique=6|reveal_channel=r|reveal_ramp=164|reveal_scale=168|reveal_soft_edge=160|reveal_technique=6|thickness_channel=r
+mc/lit_transparent_backlit_reveal_plus#e6142445|backlit+reveal|backlight_color=208|backlit_technique=6|reveal_channel=r|reveal_ramp=164|reveal_scale=168|reveal_soft_edge=160|reveal_technique=6|thickness_channel=r
+mc/lit_transparent_backlit_reveal_script_plus#e6142445|backlit+reveal|backlight_color=208|backlit_technique=6|reveal_channel=r|reveal_ramp=164|reveal_scale=168|reveal_soft_edge=160|reveal_technique=6|thickness_channel=r
+mc/lit_transparent_reveal#e6142445|reveal|reveal_channel=r|reveal_ramp=164|reveal_scale=168|reveal_soft_edge=160|reveal_technique=6
+mc/lit_transparent_reveal_advanced#e6142445|reveal|reveal_channel=r|reveal_ramp=164|reveal_scale=168|reveal_soft_edge=160|reveal_technique=6
+mc/lit_transparent_reveal_plus#e6142445|reveal|reveal_channel=r|reveal_ramp=164|reveal_scale=168|reveal_soft_edge=160|reveal_technique=6
+mc/lit_vehicle_backlit#e6142445|backlit|backlight_color=208|backlit_technique=6|thickness_channel=r
+mcs/lit_backlit_micro_tile_blend#3713e906|layers|baseNormalHeight=160|colorTint=208|colorTint1=224|detailScale1=80|detailScale2=96|detailScaleHeight1=200|detailScaleHeight2=204|glossRange=164|glossRange2=240|mask_channel=r|mixScale=192|rotateUVs1=248|rotateUVs2=252|technique=3
+mcs/lit_micro_tile_blend#3713e906|layers|baseNormalHeight=160|colorTint=192|colorTint1=208|detailScale1=80|detailScale2=96|detailScaleHeight1=184|detailScaleHeight2=188|glossRange=164|glossRange2=224|mask_channel=r|mixScale=176|rotateUVs1=232|rotateUVs2=236|technique=3
+mcs/lit_micro_tile_blend_advanced#3713e906|layers|baseNormalHeight=172|colorTint=208|colorTint1=224|detailScale1=80|detailScale2=96|detailScaleHeight1=192|detailScaleHeight2=196|glossRange=176|glossRange2=240|mask_channel=r|mixScale=184|rotateUVs1=248|rotateUVs2=252|technique=3
+mcs/lit_micro_tile_blend_plus#3713e906|layers|baseNormalHeight=160|colorTint=192|colorTint1=208|detailScale1=80|detailScale2=96|detailScaleHeight1=184|detailScaleHeight2=188|glossRange=164|glossRange2=224|mask_channel=r|mixScale=176|rotateUVs1=232|rotateUVs2=236|technique=3
+mcs/lit_transparent_backlit_advanced#3713e906|backlit|backlight_color=208|backlit_technique=6|thickness_channel=r
+mcs/lit_transparent_reveal#3713e906|reveal|reveal_channel=r|reveal_ramp=164|reveal_scale=168|reveal_soft_edge=160|reveal_technique=6

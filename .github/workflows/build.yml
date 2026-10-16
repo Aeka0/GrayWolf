@@ -1,0 +1,260 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+    # A v* tag (v1.47.0) also publishes a release: the app zip, the hash packages zip and the
+    # manifest.json GrayWolf's updater reads (src/GrayWolf/GrayWolf/Updater.h).
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Release x64
+    runs-on: windows-2022
+    env:
+      # classic-mode vcpkg at the commit the local x64-windows-static-md install was built from;
+      # src/Directory.Build.props reads VCPKG_ROOT
+      VCPKG_COMMIT: aae277acf4e7de287ddb5e208b5316614de6aad7
+      VCPKG_ROOT: C:\gw-vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: C:\gw-vcpkg-cache
+      VCPKG_BINARY_SOURCES: clear;files,C:\gw-vcpkg-cache,readwrite
+      # BUILDING.md's list; casclib comes from vcpkg-overlay-ports
+      VCPKG_PACKAGES: >-
+        opus directxtex[dx11] directxtk spdlog casclib libflac libogg miniaudio zlib cli11 miniz lz4
+        xxhash lzo nlohmann-json stb tinygltf
+        imgui[docking-experimental,dx11-binding,win32-binding]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Non-recursive on purpose: only the top level submodules are needed.
+          # DirectXShaderCompiler is consumed headers-only, so its own submodules
+          # (SPIRV-Tools, re2, ...) are a few hundred MB of dead weight here.
+          # OpenAssetTools' own submodules are fetched by the OAT step, only when it builds.
+          submodules: true
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v3
+
+      # On a tag, the exe's VERSIONINFO becomes the tag's version: the updater compares it with
+      # the manifest's app version.
+      - name: Stamp the version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}".TrimStart('v')
+          $n = ($v.Split('.') + @('0','0','0','0'))[0..3] | ForEach-Object { [int]($_ -replace '[^0-9].*$','') }
+          $rc = 'src/GrayWolf/GrayWolf/GrayWolf.rc'
+          $t = Get-Content $rc -Raw
+          $t = $t -replace '(FILEVERSION|PRODUCTVERSION) \d+,\d+,\d+,\d+', ('$1 ' + ($n -join ','))
+          $t = $t -replace '(VALUE "(File|Product)Version", )"[^"]*"', ('$1"' + ($n -join '.') + '"')
+          Set-Content $rc $t -NoNewline -Encoding ascii
+
+      # vcpkg's binary cache (one zip per built port) survives between runs; a port whose ABI
+      # (version, features, triplet, compiler) is unchanged is restored instead of rebuilt
+      - name: Restore the vcpkg binary cache
+        uses: actions/cache@v6
+        with:
+          path: C:\gw-vcpkg-cache
+          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg-overlay-ports/**') }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg-overlay-ports/**') }}-
+            vcpkg-${{ env.VCPKG_COMMIT }}-
+
+      - name: Install the vcpkg packages (x64-windows-static-md)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          git clone --quiet https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
+          git -C $env:VCPKG_ROOT checkout --quiet $env:VCPKG_COMMIT
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+          & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet x64-windows-static-md --overlay-ports=vcpkg-overlay-ports `
+              --clean-after-build ($env:VCPKG_PACKAGES -split '\s+' | Where-Object { $_ })
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed ($LASTEXITCODE)" }
+
+      # OpenAssetTools' static libs, built from the submodule (tools/build-oat.ps1 does the same
+      # locally); cached per submodule commit since the whole solution takes a while
+      - name: OpenAssetTools commit
+        id: oat
+        shell: pwsh
+        run: '"sha=$(git rev-parse HEAD:src/External/OpenAssetTools)" >> $env:GITHUB_OUTPUT'
+
+      - name: Restore the OpenAssetTools libs
+        id: oat-cache
+        uses: actions/cache@v6
+        with:
+          path: src/External/OpenAssetTools/build/lib/Release_x64
+          key: oat-libs-${{ steps.oat.outputs.sha }}-vs2022
+
+      - name: Build the OpenAssetTools libs
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        working-directory: src/External/OpenAssetTools
+        run: |
+          git submodule update --init --recursive
+          # premake as generate.bat fetches it (same release and hash), then a vs2022 solution:
+          # generate.bat's own vs2026 .slnx is not buildable by the runner's MSBuild
+          New-Item -ItemType Directory -Force build | Out-Null
+          Invoke-WebRequest https://github.com/premake/premake-core/releases/download/v5.0.0-beta8/premake-5.0.0-beta8-windows.zip -OutFile build/premake.zip
+          Expand-Archive build/premake.zip -DestinationPath build -Force
+          if ((Get-FileHash build/premake5.exe -Algorithm SHA256).Hash -ne '2301E3E23FF3074CB83A5EA6103D68C7EA81DAD56B786807C84B0643CDDEA31B') { throw 'premake hash mismatch' }
+          & build/premake5.exe vs2022
+          if ($LASTEXITCODE -ne 0) { throw "premake failed ($LASTEXITCODE)" }
+          # the MW2/MW3 x64 loaders pass a size_t to an unsigned parameter: C4267, an error under OAT's /WX
+          $env:CL = '/wd4267'
+          msbuild build/OpenAssetTools.sln -p:Configuration=Release -p:Platform=x64 -m -v:minimal -nologo
+          # tests and GUI projects may fail; what GrayWolf links is what counts
+          $libs = 'ZoneLoading','ZoneCommon','ObjWriting','ObjLoading','ObjImage','Common','ObjCommon','Parser','Utils',
+                  'Cryptography','XMemCompress','zlib','lzx','libtomcrypt','libtommath','salsa20','lz4','minilzo','minizip'
+          $missing = $libs | Where-Object { -not (Test-Path "build/lib/Release_x64/$_.lib") }
+          if ($missing) { throw "OpenAssetTools libs missing: $($missing -join ', ')" }
+
+      - name: Build GrayWolf.sln (Release)
+        shell: bash
+        run: tools/build.sh Release
+
+      - name: Self-tests (no game data)
+        shell: pwsh
+        run: ./tools/run-selftests.ps1 -Exe src/GrayWolf/x64/Release/GrayWolf.exe -Out "$env:RUNNER_TEMP/selftests"
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v7
+        with:
+          name: graywolf-release-x64
+          path: |
+            src/GrayWolf/x64/Release/*.exe
+            src/GrayWolf/x64/Release/*.dll
+            src/GrayWolf/x64/Release/zonekit/
+          if-no-files-found: warn
+
+  cppcheck:
+    name: cppcheck
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install cppcheck
+        run: choco install cppcheck --no-progress -y
+
+      # Same policy as the pre-commit hook: the warning/performance/portability findings are
+      # reported, only error-severity ones fail the build
+      - name: tools/run_cppcheck.sh
+        shell: bash
+        run: |
+          tools/run_cppcheck.sh "$RUNNER_TEMP/cppcheck.log"
+          if grep -E ': error: ' "$RUNNER_TEMP/cppcheck.log"; then
+            echo "cppcheck found error-severity issues" >&2
+            exit 1
+          fi
+
+      - name: Upload the cppcheck report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cppcheck-report
+          path: ${{ runner.temp }}/cppcheck.log
+          if-no-files-found: ignore
+
+  # Run by hand (Actions > Build > Run workflow) to check the signing secrets without cutting a
+  # release: signs this run's exe and uploads it as graywolf-signed-x64.
+  sign-check:
+    name: Sign check
+    needs: build
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-2022
+    steps:
+      - name: Download build output
+        uses: actions/download-artifact@v8
+        with:
+          name: graywolf-release-x64
+          path: app
+
+      - name: Sign GrayWolf.exe
+        uses: Kenshin9977/Discord-Overlay/.github/actions/sign-windows@sign-windows-v1
+        with:
+          files: app/GrayWolf.exe
+          ssh-host: ${{ secrets.SIGN_SSH_HOST }}
+          ssh-key: ${{ secrets.SIGN_SSH_KEY }}
+          known-hosts: ${{ secrets.SIGN_SSH_KNOWN_HOSTS }}
+          ssh-port: ${{ secrets.SIGN_SSH_PORT }}
+
+      - name: Upload the signed exe
+        uses: actions/upload-artifact@v7
+        with:
+          name: graywolf-signed-x64
+          path: app/GrayWolf.exe
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Download build output
+        uses: actions/download-artifact@v8
+        with:
+          name: graywolf-release-x64
+          path: app
+
+      # Authenticode with the Certum certificate Discord-Overlay signs with: its action pipes the exe
+      # to the signing host over SSH and refuses to go on unless Windows sees a valid, timestamped
+      # signature. Only our own exe: the Oodle DLLs beside it are signed (or not) by their vendor.
+      - name: Sign GrayWolf.exe
+        uses: Kenshin9977/Discord-Overlay/.github/actions/sign-windows@sign-windows-v1
+        with:
+          files: app/GrayWolf.exe
+          ssh-host: ${{ secrets.SIGN_SSH_HOST }}
+          ssh-key: ${{ secrets.SIGN_SSH_KEY }}
+          known-hosts: ${{ secrets.SIGN_SSH_KNOWN_HOSTS }}
+          ssh-port: ${{ secrets.SIGN_SSH_PORT }}
+
+      # Hash packages = the hand-maintained base set (asset package_index.zip of the prerelease
+      # tagged `hash-packages`: BO3 script hashes, BO4 recovered names, ...) with echo000/cod-name-db's
+      # current CSVs converted over it by GrayWolf's own update-name-db. No base yet: the CSVs alone.
+      - name: Build the hash packages
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force pkg, base | Out-Null
+          gh release download hash-packages --repo "${{ github.repository }}" --pattern package_index.zip --dir base
+          if ($LASTEXITCODE -eq 0) { Expand-Archive base/package_index.zip -DestinationPath pkg -Force }
+          else { Write-Warning "no hash-packages base release: cod-name-db's CSVs only"; $global:LASTEXITCODE = 0 }
+          $p = Start-Process app/GrayWolf.exe -ArgumentList 'update-name-db','--name-db-dir',"$PWD/pkg",'--report',"$PWD/name-db.txt" -Wait -PassThru
+          Get-Content name-db.txt
+          if ($p.ExitCode -gt 1) { throw "update-name-db failed ($($p.ExitCode))" }
+          # the updater stamps its own hash-packages.json, a base's copy would be stale
+          Remove-Item pkg/hash-packages.json -ErrorAction SilentlyContinue
+
+      - name: Zip and write manifest.json
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          $pver = (Get-Date).ToUniversalTime().ToString('yyyy.MM.dd') + ".${{ github.run_number }}"
+          $appZip = "GrayWolf-$ver-x64.zip"
+          $pkgZip = "hash-packages-$pver.zip"
+          Compress-Archive -Path app/* -DestinationPath $appZip
+          Compress-Archive -Path pkg/* -DestinationPath $pkgZip
+          $manifest = [ordered]@{
+            schema   = 1
+            app      = [ordered]@{ version = $ver;  file = $appZip; sha256 = (Get-FileHash $appZip -Algorithm SHA256).Hash.ToLower() }
+            packages = [ordered]@{ version = $pver; file = $pkgZip; sha256 = (Get-FileHash $pkgZip -Algorithm SHA256).Hash.ToLower() }
+          }
+          $manifest | ConvertTo-Json | Set-Content manifest.json -Encoding utf8NoBOM
+          Get-Content manifest.json
+          "APP_ZIP=$appZip" >> $env:GITHUB_ENV
+          "PKG_ZIP=$pkgZip" >> $env:GITHUB_ENV
+
+      - name: Create the release
+        shell: pwsh
+        run: |
+          gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" --title "GrayWolf ${{ github.ref_name }}" `
+            --generate-notes $env:APP_ZIP $env:PKG_ZIP manifest.json

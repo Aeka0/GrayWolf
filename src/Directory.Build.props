@@ -1,0 +1,45 @@
+<Project>
+  <!-- vcpkg: Opus + DirectXTex + spdlog come from a vcpkg classic install (x64-windows-static-md, /MD
+       static to match our runtime). Its folder comes from the VCPKG_ROOT environment variable (or a
+       VcpkgRoot property on the command line); the build stops with an error when neither is set.
+       Consumers reference $(VcpkgInstalled)\include and \lib.
+       (The old ForceImportBeforeCppProps toolset hack is gone: the only v140/v142-pinned projects -
+       Opus, DirectXTex - have left the solution.) -->
+  <PropertyGroup>
+    <VcpkgRoot Condition="'$(VcpkgRoot)' == '' and '$(VCPKG_ROOT)' != ''">$(VCPKG_ROOT)</VcpkgRoot>
+    <VcpkgInstalled>$(VcpkgRoot)\installed\x64-windows-static-md</VcpkgInstalled>
+    <!-- as read here: vcpkg's own MSBuild integration may set VcpkgRoot later -->
+    <GwVcpkgRoot>$(VcpkgRoot)</GwVcpkgRoot>
+  </PropertyGroup>
+  <Target Name="GwCheckVcpkg" BeforeTargets="PrepareForBuild;BuildOat">
+    <Error Condition="'$(GwVcpkgRoot)' == ''"
+           Text="VCPKG_ROOT is not set: set it to your vcpkg folder (classic mode, triplet x64-windows-static-md; BUILDING.md)." />
+    <Error Condition="'$(GwVcpkgRoot)' != '' and !Exists('$(VcpkgInstalled)')"
+           Text="vcpkg packages not found in $(VcpkgInstalled): install them with the triplet x64-windows-static-md (BUILDING.md)." />
+  </Target>
+  <!-- AddressSanitizer build (tools/build.sh DevAsan = -p:GwAsan=true): every project of the build
+       compiled /fsanitize=address, into its own folders (x64\DevAsan\GrayWolf.exe, Core in
+       x64\ReleaseAsan) so it never overwrites the normal build. vcpkg and OAT libs stay
+       uninstrumented, all /MD; the STL container annotations are off because those libs were built
+       without them (LNK2038 otherwise). The runtime clang_rt.asan_dynamic-x86_64.dll is copied beside
+       the exe. -->
+  <!-- The fuzzers (src/Fuzz/Fuzz.sln): every project of that solution also gets libFuzzer's coverage
+       instrumentation (/fsanitize=fuzzer), in folders of their own (x64\DevFuzz, ReleaseFuzz). -->
+  <PropertyGroup Condition="'$(SolutionName)' == 'Fuzz'">
+    <GwAsan>true</GwAsan>
+    <GwSuffix>Fuzz</GwSuffix>
+    <EnableFuzzer>true</EnableFuzzer>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(GwAsan)' == 'true'">
+    <GwSuffix Condition="'$(GwSuffix)' == ''">Asan</GwSuffix>
+    <EnableASAN>true</EnableASAN>
+    <CopyAsanBinariesToOutDir>true</CopyAsanBinariesToOutDir>
+    <OutDir Condition="'$(SolutionDir)' != ''">$(SolutionDir)$(Platform)\$(Configuration)$(GwSuffix)\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)$(GwSuffix)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(GwAsan)' == 'true'">
+    <ClCompile>
+      <PreprocessorDefinitions>_DISABLE_VECTOR_ANNOTATION;_DISABLE_STRING_ANNOTATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>

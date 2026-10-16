@@ -1,0 +1,61 @@
+#include "stdafx.h"
+
+// <Title> on the disk template: a ZonekitZone with the <profile> profile, served to the live
+// <Title> readers (Game<Title>.cpp, plugged in by Games/<ENGINE>/LiveGame.cpp). Replace every <...> and keep only the hooks the game needs;
+// Games/IW6/DiskGame.cpp (Ghosts) and Games/T8/DiskGame.cpp (BO4) are complete examples.
+
+#include "CoDAssets.h"
+#include "DiskGame.h"
+#include "ExportWriters.h"
+#include "ZonekitZone.h"
+
+namespace
+{
+    class GameZone final : public ZonekitZone
+    {
+    public:
+        explicit GameZone(const std::string& Path) : ZonekitZone(Path)
+        {
+            // Images and sounds: where this game keeps their bytes (in-zone, paks, xpak, CASC,
+            // banks); a kind without an exporter is shown disabled and reported as not supported. Models and anims
+            // come from ZonekitZone. Write images through ExportWriters::ImageSink.
+            // Exports(DiskGame::Kind::Image, [this](const DiskGame::Context& C, DiskGame::Totals& T) { ... });
+        }
+
+    protected:
+        const char* Profile() const override { return "<profile>"; }
+        const ICoDGame& LiveGame() const override { return LiveGames::Get("<ENGINE>"); }
+        // The live readers' string handler (bone names are script-string indices) and image
+        // handler (read the disk way, never through runtime-only fields).
+        VirtualGameSession::Handlers Handlers() override { return { nullptr, nullptr }; }
+
+        // Optional hooks, with their defaults:
+        // bool LoadBytes(std::vector<uint8_t>& Zone, std::string& Error) override;  // FastFile::Decompress
+        // bool DerefAssetPointers() const override { return false; }  // true when the loader resolves
+        //                                                             // asset pointers with resolve_deref
+        // void Fixups() override {}   // what the game's load-time code writes (Ghosts: LOD surfaces)
+        // std::string AssetName(DiskGame::Kind K, int64_t Pos) const override;   // default: string at +0
+        // bool IsReference(DiskGame::Kind K, const std::string& Name, int64_t Pos) const override;
+    };
+
+    class Game final : public DiskGame::IDiskGame
+    {
+    public:
+        const char* Id() const override { return "<id>"; }            // <out>/<id>/ and --game <id>
+        const char* Title() const override { return "Call of Duty: <Title>"; }
+        const char* Engine() const override { return "<ENGINE>"; }     // as in Module.cpp
+        std::vector<std::string> Aliases() const override { return {}; }
+        // for its kinds: the exporters its constructor registers (keep the constructor to that)
+        std::unique_ptr<DiskGame::IDiskZone> Unopened() const override { return std::make_unique<GameZone>(std::string()); }
+
+        std::unique_ptr<DiskGame::IDiskZone> Open(const std::string& Path, const DiskGame::ExportOptions&, std::string& Error) const override
+        {
+            auto Zone = std::make_unique<GameZone>(Path);
+            if (!Zone->Open(Error)) return nullptr;
+            return Zone;
+        }
+    };
+
+    const Game TheGame;
+    const DiskGame::Registration Registered(TheGame);
+}

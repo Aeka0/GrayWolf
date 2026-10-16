@@ -1,0 +1,813 @@
+#include "stdafx.h"
+
+// Black Ops 7 on the disk template: a ZonekitZone with the bo7 profile (zone format iwctx), served to
+// Black Ops 7's own readers (GameBlackOps7.cpp). The install is plain Steam files (Call of Duty HQ,
+// cod25): each .ff with its .fp update patch beside it (Games/IW/Container25.cpp applies it), the
+// streamed meshes, images and sounds in its .xsub packages (XSUBCache, version 23).
+// What is Black Ops 7's own: pointers DB_RewindPrepare decides (linked by the walker, ZoneTableWalker
+// PointerIf), assets named by a 63-bit hash, the LOD surfaces the game copies at load.
+
+#include "CoDAssets.h"
+#include "DiskGame.h"
+#include "Games/BO7/TechsetFormat.h"
+#include "ExportWriters.h"
+#include "FastFile.h"
+#include "GameBlackOps7.h"
+#include "HalfFloats.h"
+#include "MapLive.h"
+#include "Games/Common/MeshDecode.h"
+#include "Games/Common/StringCipher.h"
+#include "Games/IW/IWZone.h"
+#include "Games/IW/IwBesideZones.h"
+#include "Games/IW/IwctxReaders.h"
+#include "Games/IW/IwTerrain.h"
+#include "Games/Treyarch/TreyarchPackages.h"
+#include "SettingsManager.h"
+#include "Strings.h"
+#include "WraithNameIndex.h"
+#include "XSUBCache.h"
+
+#include <algorithm>
+#include <atomic>
+#include <filesystem>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
+
+namespace fs = std::filesystem;
+
+namespace
+{
+    // XModel (0xd8): its name at 8, the LODs' pointer 0x90 (u8 0x12 records of 0x48: the
+    // xmodelsurfs at 0, the surfaces the game copies from it at 8); XModelSurfs keeps them at 8
+    constexpr int64_t ModelName = 8, ModelLodCount = 0x12, ModelLods = 0x90, LodSize = 0x48, LodSurfs = 8, ModelSurfsSurfs = 8;
+
+    class BO7Zone final : public IWZone
+    {
+    public:
+        explicit BO7Zone(const std::string& Path) : IWZone(Path)
+        {
+            using namespace DiskGame;
+            Exports(Kind::Image, [this](const Context& C, Totals& T) { ExportImages(C, T); });
+            Exports(Kind::Map, [this](const Context& C, Totals& T) { ExportMap(C, T); });
+            Exports(Kind::Sound, [this](const Context& C, Totals& T) { ExportSounds(C, T); });
+            // gscobj (0x18, 0x3861c50): {XHash name, u32 len 8, buffer 0x10}, a GSCOBJ acts reads
+            Exports(Kind::Script, [this](const Context& C, Totals& T) {
+                ExportScripts(C, T, Scripts::Acts, { { "gscobj", [this](int64_t Pos, Scripts::Script& S) {
+                                  S.Compiled = true;
+                                  return BytesAt(PointerAt(Pos + 0x10), At<uint32_t>(Image(), Pos + 8), S.Bytes);
+                              } } });
+            });
+            // rawfiles, luafile (0x60) {hash, i32 size 0x3c, buffer 0x40} and string tables, their
+            // strings encrypted as the localized ones
+            ExportsHashedRawfiles(0x3c, 0x40);
+            ExportsMaterialLinks({ 0x68, 0x6d, 0x28, 0x30, 0x20, 0x18, 0x6c, 0x40, 0x6e, 0x88 });
+            // soundbank (0x40): aliases 0x20 (u32 count 0x34) of 0x48 {entries 0x10, hash 0x18, u16
+            // count 0x34}, an entry 0x30 with its sndasset at 0x20
+            ExportsSoundLinks({ 0x20, 0x34, 0x48, 0x18, 0x10, 0x34, 0x30, 0x20 });
+            ExportsTechsets(BO7::TechsetFormat());
+            const auto Decrypted = [this](const std::string& Raw) {
+                std::string Error, Text;
+                const auto* Tables = ExportWriters::ZoneProfile(Profile(), Error);
+                const auto* Cipher = Tables != nullptr ? StringCipher::Load(Tables->Profile.Dir, Error) : nullptr;
+                return StringCipher::Decrypt(Cipher, Raw, Text) ? Text : Raw;
+            };
+            // scriptbundle (0x30, its loader 0x3887630, a table's 0x3887a40, a value's 0x3888060)
+            ExportsScriptBundles({}, Decrypted);
+            ExportsAssetRefs(Decrypted);
+            ExportsColumnTables(ColumnTypes::Bo6, Decrypted);
+        }
+
+        // each sndasset, named by its hash, decoded by GameBlackOps7::ReadXSound (Games/IW/IwctxReaders'
+        // export, shared with Black Ops 6)
+        void ExportSounds(const DiskGame::Context& C, DiskGame::Totals& T)
+        {
+            std::vector<IwctxReaders::SoundEntry> Found;
+            for (const auto& I : Walk().Instances)
+                if (OwnerIs(I, "sndasset"))
+                    Found.push_back({ GameBlackOps7::HashName("xsound", At<uint64_t>(Image(), I.Pos)), Live().Addr((uint64_t)I.Pos),
+                                      At<uint16_t>(Image(), I.Pos + GameBlackOps7::SoundRate), At<uint32_t>(Image(), I.Pos + GameBlackOps7::SoundFrames) });
+            IwctxReaders::ExportSounds(C, T, Name(), Found);
+        }
+
+        bool ReadMap(Maps::MapScene& Scene, std::map<std::string, uint64_t>& Models) override;
+
+    protected:
+        const char* Profile() const override { return "bo7"; }
+        const ICoDGame& LiveGame() const override { return LiveGames::Get("BO7"); }
+        VirtualGameSession::Handlers Handlers() override
+        {
+            // the package index's names, then the bo7 profile's names.wni: names found for the
+            // game's hashes in its own strings and the index's
+            IwctxReaders::LoadNameIndexes();
+            static std::once_flag Names;
+            std::call_once(Names, [] {
+                std::string Error;
+                if (const auto* L = ExportWriters::ZoneProfile("bo7", Error))
+                    CoDAssets::AssetNameCache.LoadIndex((fs::path(L->Profile.Dir) / "names.wni").string());
+            });
+            return { SlotString, DiskImage };
+        }
+
+        void Fixups() override
+        {
+            RegisterStrings();
+            Served(true);
+            // (the index asks what the zone itself defines: the zones beside a map are left out)
+            if (!Indexing && !Options.ZoneAlone) LoadBeside();
+            Counter("lods_without_surfaces") += LinkLods();
+        }
+        // the zone's script strings, which name the anims' notetracks (by their hash)
+        void RegisterStrings() const
+        {
+            std::string Error;
+            if (const auto* Tables = ExportWriters::ZoneProfile(Profile(), Error))
+                IwctxReaders::RegisterScriptStrings(IwctxReaders::ZoneStrings(Zone(), Tables->Profile.Dir));
+        }
+        // the transient zones served beside this one (ProcessReader's extra regions go with the session)
+        void Served(bool On) override
+        {
+            if (On) Beside.Serve();
+        }
+
+        // a model by the name at 8 ("a::b" as a_b), anything else by its hash at 0
+        std::string AssetName(DiskGame::Kind K, int64_t Pos) const override
+        {
+            // Pos may lie past this zone: an asset of a transient zone served beside it
+            const uint64_t Address = Live().Addr((uint64_t)Pos);
+            if (K == DiskGame::Kind::Model)
+            {
+                std::string N = CString(Get<uint64_t>(Address + ModelName));
+                if (N.empty()) return GameBlackOps7::HashName("xmodel", Get<uint64_t>(Address));
+                return Strings::Replace(N, "::", "_");
+            }
+            if (K == DiskGame::Kind::Image) return GameBlackOps7::HashName("ximage", Get<uint64_t>(Address));
+            if (K == DiskGame::Kind::Anim) return GameBlackOps7::HashName("xanim", Get<uint64_t>(Address));
+            if (K == DiskGame::Kind::Script) return GameBlackOps7::HashName("script", Get<uint64_t>(Address)) + ".gsc";
+            if (K == DiskGame::Kind::Rawfile) return GameBlackOps7::HashName("rawfile", Get<uint64_t>(Address));
+            if (K == DiskGame::Kind::Data) return GameBlackOps7::HashName("stringtable", Get<uint64_t>(Address));
+            return GameBlackOps7::HashName("xasset", Get<uint64_t>(Address));
+        }
+        // the NUL-terminated text at an address here or beside, "" when it is in neither
+        std::string CString(uint64_t Address) const
+        {
+            std::string S;
+            for (const uint8_t* P; S.size() < 4096 && (P = Locate(Address + S.size(), 1)) != nullptr && *P != 0;) S.push_back((char)*P);
+            return S;
+        }
+        // localize (0x10, 0x3868f60): the key's hash at 0, the text at 8 encrypted with the string
+        // cipher ([id 0x80-0xBF][b1][n], strings.cipher.txt from DecryptString 0x8c8ebd0); a text
+        // the table cannot decrypt is left empty
+        void LocalizeEntry(int64_t Pos, std::string& Key, std::string& Text) const override
+        {
+            Key = GameBlackOps7::HashName("localize", At<uint64_t>(Image(), Pos));
+            std::string Error;
+            const auto* Tables = ExportWriters::ZoneProfile(Profile(), Error);
+            const auto* Cipher = Tables != nullptr ? StringCipher::Load(Tables->Profile.Dir, Error) : nullptr;
+            if (!StringCipher::Decrypt(Cipher, StringAt(PointerAt(Pos + 8)), Text)) Text.clear();
+        }
+        // every asset of a zone's list is inline here: references are by hash, never a header
+        bool IsReference(DiskGame::Kind, const std::string&, int64_t) const override { return false; }
+        void Defines(std::vector<DiskGame::AssetId>& Out) const override
+        {
+            ZonekitZone::Defines(Out);
+            DefineImages(Out);
+        }
+
+    public:
+        // ---- a map's transient zones (<zone>_*_tr.ff beside it), which the game loads after the
+        // level: the world's vertices and most of its models live there. Each is walked with the bo7
+        // tables, relocated where it is served (above this zone), and every reference the zones make
+        // to each other resolved as the game's shared rewind table and asset pools would: by rewind
+        // key (the low 60 bits of a loaded pointer) and by asset hash.
+        IwBeside::Set Beside;         // the global zones (Before) and the transient zones, served beside
+        std::string Install;          // --install: where the global zones are when not beside the level
+        bool Indexing = false;        // opened for the install index (ExportOptions::Indexing)
+
+        // the bytes at an address of this zone or of a transient zone served beside it, null when
+        // N bytes are not all there
+        const uint8_t* Locate(uint64_t Address, uint64_t N) const
+        {
+            if (Live().Contains(Address) && Address - Live().Origin() + N <= Image().size()) return Image().data() + (Address - Live().Origin());
+            return Beside.Locate(Address, N);
+        }
+        // which zone an address is in (the map debug file's)
+        std::string ZoneOf(uint64_t Address) const
+        {
+            if (Live().Contains(Address)) return Name();
+            for (const auto& S : Beside.All())
+                if (Address >= S->Base && Address - S->Base < S->Bytes.size()) return S->Name;
+            return "-";
+        }
+        template <class T>
+        T Get(uint64_t Address) const
+        {
+            T V{};
+            if (const uint8_t* P = Locate(Address, sizeof(T))) std::memcpy(&V, P, sizeof(T));
+            return V;
+        }
+        // writes a pointer field (an address) with an address
+        void Put(uint64_t Field, uint64_t Value)
+        {
+            if (Live().Contains(Field))
+            {
+                Live().Poke(Field - Live().Origin(), Value);
+                return;
+            }
+            Beside.Put(Field, Value);
+        }
+
+    private:
+        VirtualGameSession& Live() const { return const_cast<BO7Zone*>(this)->ZonekitZone::Live(); }
+
+        // the zones the game loads before a level (FastFile load order: code, global, then the
+        // mode's ingame zones): their rewind keys and assets are what a level's references name
+        // when they name nothing of the level's own (names, LOD surfaces, materials, images)
+        std::vector<std::string> GlobalZones() const
+        {
+            const std::string N = ExportNaming::Lower(Name());
+            std::vector<std::string> Out;
+            if (N.compare(0, 3, "zm_") == 0)
+                Out = { "code_pre_gfx", "code_post_gfx", "global", "global_stream_mp", "global_shared_mp", "ingame", "ingame_shared_mp", "ingame_zm" };
+            else
+                Out = { "code_pre_gfx", "code_post_gfx", "global", "global_base_mp", "global_stream_mp", "global_shared_mp", "ingame",
+                        "ingame_base_mp", "ingame_shared_mp", "ingame_mp" };
+            // each global zone's techsets (techsets_<zone>: the code zones have none)
+            for (size_t K = 0, Count = Out.size(); K < Count; K++) Out.push_back("techsets_" + Out[K]);
+            // and the level's own companions: its techsets, its sounds (ww_, then the language's)
+            for (const char* Companion : { "techsets_", "ww_", "ens_" }) Out.push_back(Companion + N);
+            return Out;
+        }
+
+        void LoadBeside()
+        {
+            if (Root("gfx_map") < 0) return;
+            std::string Error;
+            const auto* Loaded = ExportWriters::ZoneProfile("bo7", Error);
+            if (Loaded == nullptr) return;
+            const fs::path Dir = fs::path(FastFilePath()).parent_path();
+            const std::string Prefix = ExportNaming::Lower(Name()) + "_";
+            std::vector<fs::path> Transient;
+            std::error_code Ec;
+            for (const auto& E : fs::directory_iterator(Dir, Ec))
+            {
+                const std::string F = ExportNaming::Lower(E.path().filename().string());
+                if (F.size() > Prefix.size() + 6 && F.compare(0, Prefix.size(), Prefix) == 0 && F.compare(F.size() - 6, 6, "_tr.ff") == 0)
+                    Transient.push_back(E.path());
+            }
+            std::sort(Transient.begin(), Transient.end());
+            // the global zones first (they load first: their keys and assets only fill what the level
+            // and its transient zones do not define, as a later load overrides an asset of the same
+            // name), then the transient zones (Games/IW/IwBesideZones.h)
+            std::vector<std::string> Globals, Transients;
+            for (const auto& G : GlobalZones())
+            {
+                // beside the level, else in the install (a level copied out alone)
+                if (ExportNaming::Lower(G) == ExportNaming::Lower(Name())) continue;
+                for (const fs::path& From : { Dir, fs::path(Install), Install.empty() ? fs::path() : fs::path(Install) / "cod25" })
+                    if (!From.empty() && fs::exists(From / (G + ".ff"), Ec))
+                    {
+                        Globals.push_back((From / (G + ".ff")).string());
+                        break;
+                    }
+            }
+            for (const auto& P : Transient) Transients.push_back(P.string());
+            std::map<std::string, size_t> Counts;
+            const uint64_t Above = Live().Origin() + Image().size();
+            Beside.Load(Globals, *Loaded, Above, Counts, true);
+            Beside.Load(Transients, *Loaded, Above, Counts);
+            // the asset references of the indexed types no zone loaded defines, by type and hash
+            std::set<std::pair<std::string, uint64_t>> Wanted;
+            if (!Beside.Empty())
+            {
+                std::map<std::string, size_t> First;
+                Beside.Link(Walk(), Live().Origin(), Zone(), Rules(), [this](uint64_t Field, uint64_t Value) { Put(Field, Value); }, First,
+                            [&](const std::string&, uint64_t, uint64_t Value, const std::string& Type) {
+                                if (std::find(std::begin(IndexedParts), std::end(IndexedParts), Type) != std::end(IndexedParts))
+                                    Wanted.emplace(Type, Value & Rules().AssetHashMask);
+                            });
+            }
+            // the zones that define them (other maps' transient zones, other modes' items), found in
+            // the install index's parts, loaded after the global zones (filed last, as Before)
+            if (!Wanted.empty()) LoadIndexed(Wanted, *Loaded, Above, Counts);
+            if (!Beside.Empty())
+            {
+                // (an asset reference's type when the chain says it; the map debug file lists them all)
+                std::map<std::string, size_t> UnlinkedTypes;
+                std::vector<std::string> UnlinkedList;   // zone, field, value, type or key
+                Beside.Link(Walk(), Live().Origin(), Zone(), Rules(), [this](uint64_t Field, uint64_t Value) { Put(Field, Value); }, Counts,
+                            [&](const std::string& Zone, uint64_t Field, uint64_t Value, const std::string& Type) {
+                                if (Type != "asset" && Type != "key") UnlinkedTypes[Type]++;
+                                if (Maps::DebugFile()) UnlinkedList.push_back(std::format("{} {:x} {:016x} {}", Zone.empty() ? Name() : Zone, Field, Value, Type));
+                            });
+                if (FILE* Dbg = Maps::DebugFile())
+                {
+                    std::fprintf(Dbg, "[zones] %s: %zu zones beside (%zu global), %zu links across zones, %zu unresolved (%zu assets; %zu of the global zones' own)\n", Name().c_str(),
+                                 Beside.All().size(), (size_t)std::count_if(Beside.All().begin(), Beside.All().end(), [](const auto& S) { return S->Before; }),
+                                 Counts["links_across_zones"], Counts["refs_unresolved_across_zones"], Counts["refs_unresolved_across_zones_assets"],
+                                 Counts["refs_unresolved_in_zones_before"]);
+                    for (const auto& [Type, N] : UnlinkedTypes) std::fprintf(Dbg, "[zones]   unresolved %s: %zu\n", Type.c_str(), N);
+                    for (const auto& L : UnlinkedList) std::fprintf(Dbg, "[unresolved] %s\n", L.c_str());
+                }
+            }
+            for (const auto& [K, N] : Counts) Counter(K) += N;
+            if (Beside.Empty()) return;
+            Served(true);
+        }
+
+        // The zones the install index says define the Wanted references (its parts), the zones
+        // giving the most first, none already loaded: loaded beside as Before zones. The index is
+        // read (or built: this zone's session parked meanwhile) only when something is wanted.
+        void LoadIndexed(const std::set<std::pair<std::string, uint64_t>>& Wanted, const ExportWriters::LoadedProfile& Loaded, uint64_t Above,
+                         std::map<std::string, size_t>& Counts)
+        {
+            Counts["refs_wanted_from_index"] += Wanted.size();
+            if (Game == nullptr || Install.empty())
+            {
+                Counts["refs_wanted_no_index"] += Wanted.size();
+                return;
+            }
+            std::string Error;
+            Park();
+            const auto Index = DiskGame::ZoneIndex::For(*Game, Options, Install, IndexKey(), nullptr, nullptr, Error);
+            Resume();
+            if (!Index)
+            {
+                Counts["refs_wanted_no_index"] += Wanted.size();
+                return;
+            }
+            std::set<std::string> Have{ ExportNaming::Lower(Name()) };
+            for (const auto& S : Beside.All()) Have.insert(ExportNaming::Lower(S->Name));
+            std::map<size_t, std::set<std::pair<std::string, uint64_t>>> Gives;
+            for (const auto& W : Wanted)
+                for (const size_t Z : Index->PartIn(W.first, W.second))
+                    if (!Have.count(ExportNaming::Lower(fs::path(Index->Zones()[Z]).stem().string()))) Gives[Z].insert(W);
+            std::set<std::pair<std::string, uint64_t>> Left = Wanted;
+            std::vector<std::string> Paths;
+            while (!Left.empty() && !Gives.empty())
+            {
+                const auto Count = [&](const auto& Ws) { return std::count_if(Ws.begin(), Ws.end(), [&](const auto& W) { return Left.count(W) != 0; }); };
+                const auto Best = std::max_element(Gives.begin(), Gives.end(), [&](const auto& A, const auto& B) { return Count(A.second) < Count(B.second); });
+                size_t Takes = 0;
+                for (const auto& W : Best->second) Takes += Left.erase(W);
+                if (Takes == 0) break;
+                std::vector<std::string> Found;
+                std::string Why;
+                if (Game->ResolveZones(Install, { Index->Zones()[Best->first] }, Options, Found, Why) && !Found.empty()) Paths.push_back(Found.front());
+                Gives.erase(Best);
+            }
+            Counts["refs_not_indexed"] += Left.size();
+            Counts["zones_beside_from_index"] += Beside.Load(Paths, Loaded, Above, Counts, true);
+            if (FILE* Dbg = Maps::DebugFile())
+                std::fprintf(Dbg, "[zones] %s: %zu references wanted from the index, %zu zones loaded for them, %zu not indexed\n", Name().c_str(),
+                             Wanted.size(), Paths.size(), Left.size());
+        }
+
+    public:
+        // the asset types a map's references are looked up by in the install index (IDiskZone::Parts)
+        static constexpr const char* IndexedParts[] = { "xmodelsurfs", "xmodel", "material", "image" };
+        // What other zones name and this one holds: every instance of the IndexedParts types by its
+        // name hash
+        void Parts(std::vector<std::pair<std::string, uint64_t>>& Out) const override
+        {
+            const auto& R = Walk();
+            for (const auto& I : R.Instances)
+                if (I.Owner < R.OwnerNames.size() &&
+                    std::find(std::begin(IndexedParts), std::end(IndexedParts), R.OwnerNames[I.Owner]) != std::end(IndexedParts))
+                    Out.emplace_back(R.OwnerNames[I.Owner], At<uint64_t>(Zone(), I.Pos) & Rules().AssetHashMask);
+        }
+        std::string IndexKey() const override { return ZonekitZone::IndexKey() + "+parts1"; }
+        const DiskGame::IDiskGame* Game = nullptr;   // whose install index LoadIndexed reads
+        DiskGame::ExportOptions Options;
+
+    private:
+        // the game's load-time copy lod.surfs = lod.modelSurfs->surfs (DB_ModelFixup), for every
+        // LOD whose xmodelsurfs is here or in a zone served beside; the others are left without
+        // surfaces (counted, the global zones' own models apart)
+        size_t LinkLods()
+        {
+            size_t Unlinked = 0;
+            const auto Link = [&](uint64_t Model, bool Count) {
+                const uint64_t Lods = Get<uint64_t>(Model + ModelLods);
+                if (Locate(Lods, LodSize) == nullptr) return;
+                const int64_t N = Get<uint8_t>(Model + ModelLodCount);
+                for (int64_t L = 0; L < N; L++)
+                {
+                    const uint64_t Lod = Lods + (uint64_t)(L * LodSize);
+                    const uint64_t Surfs = Get<uint64_t>(Lod);
+                    const uint64_t Data = Locate(Surfs, 0x48) ? Get<uint64_t>(Surfs + ModelSurfsSurfs) : 0;
+                    if (Locate(Data, 1) == nullptr)
+                    {
+                        Unlinked += Count;
+                        continue;
+                    }
+                    Put(Lod + LodSurfs, Data);
+                }
+            };
+            for (const auto& I : Walk().Instances)
+                if (OwnerIs(I, "xmodel")) Link(Live().Addr((uint64_t)I.Pos), true);
+            for (const auto& S : Beside.All())
+                for (const auto& I : S->R.Instances)
+                    if (I.Owner < S->R.OwnerNames.size() && S->R.OwnerNames[I.Owner] == "xmodel") Link(S->Base + (uint64_t)I.Pos, !S->Before);
+            return Unlinked;
+        }
+
+        static std::unique_ptr<XImageDDS> DiskImage(const XImage_t& Image)
+        {
+            return ServedZone<BO7Zone>() == nullptr ? nullptr : GameBlackOps7::LoadXImage(Image);
+        }
+
+        void ExportImages(const DiskGame::Context& C, DiskGame::Totals& T)
+        {
+            ImageList L;
+            for (const auto& I : Walk().Instances)
+                if (OwnerIs(I, "image")) L.Order.push_back(I.Pos);
+            // a map's transient zones' images too, by their address past this zone (Pos = address - origin);
+            // the global zones' only for a selection (the map's textures): the rest are theirs to export
+            for (const auto& S : Beside.All())
+                for (const auto& I : S->R.Instances)
+                    if ((!S->Before || C.Only != nullptr) && I.Owner < S->R.OwnerNames.size() && S->R.OwnerNames[I.Owner] == "image")
+                        L.Order.push_back((int64_t)(S->Base + (uint64_t)I.Pos - Live().Origin()));
+            L.NameAt = 0;
+            // the header past its hash (format, sizes, the mips' package keys), the in-zone pixels, the extension
+            L.KeyOf = [this](int64_t Pos, const std::string& Extension) {
+                uint64_t H = 0xcbf29ce484222325ull;
+                const auto Mix = [&H](const uint8_t* P, uint64_t N) {
+                    for (uint64_t K = 0; P != nullptr && K < N; K++) H = (H ^ P[K]) * 0x100000001b3ull;
+                };
+                const uint64_t Address = Live().Addr((uint64_t)Pos);
+                Mix(Locate(Address + 8, 0x38), 0x38);
+                const uint64_t MipCount = Get<uint8_t>(Address + 0x2e) & 0xF;
+                Mix(Locate(Get<uint64_t>(Address + 0x30), MipCount * 24), MipCount * 24);
+                const uint32_t Size = Get<uint32_t>(Address + 0x18);
+                Mix(Locate(Get<uint64_t>(Address + 0x38), Size), Size);
+                Mix((const uint8_t*)Extension.data(), Extension.size());
+                return H ? H : 1;
+            };
+            L.Decode = [this](int64_t Pos, const std::string& Name) {
+                return GameBlackOps7::LoadXImage(XImage_t(ImageUsageType::Unknown, 0, Live().Addr((uint64_t)Pos), Name));
+            };
+            L.FailWhy = [this](int64_t Pos) {
+                return std::string(Get<uint64_t>(Live().Addr((uint64_t)Pos) + 0x38) != 0 ? "in zone" : "streamed");
+            };
+            L.OnePerName = true;
+            ExportImageList(C, T, L);
+        }
+    };
+
+    // ---- the level (C2M's BlackOps7.cs and BlackOps6 structs, offsets from the gfx_map loader's
+    // tables, 0x385b900 and its readers). gfx_map (0x10): the GfxWorld (0xb370) at 8, its name at 8.
+    // GfxWorldSurfaces inline at 0xd8: surface count u32 0, material count u32 0xc, brush model
+    // count u32 0x14; brush models 0x58 (60 bytes: first surface u32 48, end u32 52), surfaces 0x78
+    // (40 bytes), materials 0xa0 (asset pointers), per-surface draw data 0xc0 (128 bytes).
+    constexpr int64_t WorldName = 8, Surf = 0xd8;
+    constexpr int64_t SurfCount = 0, SurfMaterialCount = 0xc, SurfBrushCount = 0x14, SurfBrushes = 0x58, SurfSurfaces = 0x78,
+                      SurfMaterials = 0xa0, SurfData = 0xc0;
+    constexpr int64_t BrushSize = 60, BrushStart = 48, BrushEnd = 52;
+    // A surface (40): first index u32 4, packed index table u32 8 (in 32-byte tables), its draw data
+    // u32 12, material u32 16, face count u16 20, packed table count u16 22, vertex count u16 24,
+    // packed indices u32 36
+    constexpr int64_t SurfaceSize = 40, SfFirstIndex = 4, SfTable = 8, SfData = 12, SfMaterial = 16, SfFaces = 20, SfTables = 22,
+                      SfVertices = 24, SfPacked = 36;
+    // Its draw data (128): position offset x y z and scale 0, its transient zone u32 16, uv layers
+    // u32 28, byte offsets into the transient zone's position data: positions (u64: 21 bits per
+    // axis) 40, tangent frames (u32) 44, colours 52 (0: none), uvs (2 floats per layer) 56
+    constexpr int64_t DataSize = 128, DtZone = 16, DtLayers = 28, DtXyz = 40, DtTangent = 44, DtColor = 52, DtUv = 56;
+    // gfx_map_trzone (0x190): its index i32 0x14; its draw data inline at 0x18: position data size
+    // u32 0x18, index count u32 0x1c, packed table count u32 0x20, packed indices size u32 0x28,
+    // the position data 0x30, the u16 indices 0x38, the 32-byte packed tables 0x40, the packed
+    // indices 0x48
+    constexpr int64_t TzIndex = 0x14, TzPosSize = 0x18, TzIndexCount = 0x1c, TzTableCount = 0x20, TzPackedSize = 0x28, TzPos = 0x30,
+                      TzIndices = 0x38, TzTables = 0x40, TzPacked = 0x48;
+    // GfxWorldStaticModels inline at 0x258: model count u32 4, instance count u32 8 (24-byte
+    // records at 0xa0: first placement u32 0, count u16 4, model u16 8), placement count u32 0xc
+    // (24 bytes at 0x128: origin 3 x i32 / 4096, rotation 4 x u16 over [-1, 1] x y z w, scale half
+    // float 20), models 0x90 (16 bytes, the XModel at 0)
+    constexpr int64_t SModels = 0x258, SmModelCount = 4, SmInstCount = 8, SmPlaceCount = 0xc, SmModels = 0x90, SmInsts = 0xa0,
+                      SmPlacements = 0x128;
+
+    bool BO7Zone::ReadMap(Maps::MapScene& Scene, std::map<std::string, uint64_t>& Models)
+    {
+        const int64_t Asset = Root("gfx_map");
+        if (Asset < 0) return false;
+        const int64_t World = Off(PointerAt(Asset + 8));
+        if (World < 0) return false;
+        const auto& Img = Image();
+        FILE* Dbg = Maps::DebugFile();
+        Scene.Name = StringAt(PointerAt(World + WorldName));
+        if (Scene.Name.empty()) Scene.Name = Name();
+
+        // ---- the transient zones' draw data, by their index: this zone's and its _tr zones'
+        struct DrawData
+        {
+            const uint8_t* Pos = nullptr;
+            uint64_t PosSize = 0;
+            const uint8_t* Buf = nullptr;   // the zone holding the index data
+            size_t BufSize = 0;
+            uint64_t Indices = 0, Tables = 0, Packed = 0;   // offsets into Buf
+            bool Ok = false;
+        };
+        std::unordered_map<int32_t, DrawData> Zones;
+        const auto AddZone = [&](uint64_t Tz, const uint8_t* Buf, size_t BufSize, uint64_t Base) {
+            DrawData D;
+            D.PosSize = Get<uint32_t>(Tz + TzPosSize);
+            const uint64_t PosAt = Get<uint64_t>(Tz + TzPos), IdxAt = Get<uint64_t>(Tz + TzIndices);
+            const uint64_t TabAt = Get<uint64_t>(Tz + TzTables), PackAt = Get<uint64_t>(Tz + TzPacked);
+            D.Pos = Locate(PosAt, D.PosSize);
+            D.Buf = Buf, D.BufSize = BufSize;
+            D.Ok = D.Pos != nullptr && IdxAt >= Base && TabAt >= Base && PackAt >= Base && IdxAt - Base < BufSize && TabAt - Base < BufSize &&
+                   PackAt - Base < BufSize;
+            if (D.Ok) D.Indices = IdxAt - Base, D.Tables = TabAt - Base, D.Packed = PackAt - Base;
+            const int32_t Index = Get<int32_t>(Tz + TzIndex);
+            const auto Have = Zones.find(Index);
+            if (Have == Zones.end() || (!Have->second.Ok && D.Ok)) Zones[Index] = D;
+        };
+        for (const auto& I : Walk().Instances)
+            if (OwnerIs(I, "gfx_map_trzone")) AddZone(Live().Addr((uint64_t)I.Pos), Img.data(), Img.size(), Live().Origin());
+        for (const auto& S : Beside.All())
+            for (const auto& I : S->R.Instances)
+                if (I.Owner < S->R.OwnerNames.size() && S->R.OwnerNames[I.Owner] == "gfx_map_trzone")
+                    AddZone(S->Base + (uint64_t)I.Pos, S->Bytes.data(), S->Bytes.size(), S->Base);
+
+        const int64_t W = World + Surf;
+        const uint32_t SurfaceCount = At<uint32_t>(Img, W + SurfCount), BrushCount = At<uint32_t>(Img, W + SurfBrushCount);
+        const uint32_t MaterialCount = At<uint32_t>(Img, W + SurfMaterialCount);
+        const int64_t Surfaces = Off(PointerAt(W + SurfSurfaces)), Brushes = Off(PointerAt(W + SurfBrushes));
+        const int64_t Data = Off(PointerAt(W + SurfData)), MaterialsAt = Off(PointerAt(W + SurfMaterials));
+        if (Dbg)
+            std::fprintf(Dbg, "[map] %s world %llx surfaces %u at %llx brushes %u at %llx data %llx materials %u at %llx trzones %zu (%zu zones beside)\n",
+                         Scene.Name.c_str(), (long long)World, SurfaceCount, (long long)Surfaces, BrushCount, (long long)Brushes, (long long)Data,
+                         MaterialCount, (long long)MaterialsAt, Zones.size(), Beside.All().size());
+        if (Surfaces < 0 || Data < 0) return false;
+
+        // a world vertex: its surface's first vertex key + its index in the surface
+        std::vector<uint32_t> FirstKey(SurfaceCount + 1, 0);
+        for (uint32_t S = 0; S < SurfaceCount; S++)
+            FirstKey[S + 1] = FirstKey[S] + At<uint16_t>(Img, Surfaces + (int64_t)S * SurfaceSize + SfVertices);
+        const Maps::WorldBuilder::Fetch Fetch = [&](uint32_t Key, Maps::Vertex& V) {
+            const auto It = std::upper_bound(FirstKey.begin(), FirstKey.end(), Key);
+            if (It == FirstKey.begin() || It == FirstKey.end()) return false;
+            const uint32_t S = (uint32_t)(It - FirstKey.begin() - 1), I = Key - FirstKey[S];
+            const int64_t Sf = Surfaces + (int64_t)S * SurfaceSize;
+            const int64_t D = Data + (int64_t)At<uint32_t>(Img, Sf + SfData) * DataSize;
+            const auto Z = Zones.find((int32_t)At<uint32_t>(Img, D + DtZone));
+            if (Z == Zones.end() || !Z->second.Ok) return false;
+            const uint8_t* Pos = Z->second.Pos;
+            const uint64_t PosSize = Z->second.PosSize;
+            const auto Read = [&](uint64_t At, void* Out, size_t N) {
+                if (At + N > PosSize) return false;
+                std::memcpy(Out, Pos + At, N);
+                return true;
+            };
+            uint64_t P = 0;
+            if (!Read(At<uint32_t>(Img, D + DtXyz) + (uint64_t)I * 8, &P, 8)) return false;
+            const float Scale = At<float>(Img, D + 12);
+            for (int K = 0; K < 3; K++) V.Pos[K] = (float)((P >> (21 * K)) & 0x1FFFFF) * Scale + At<float>(Img, D + K * 4);
+            uint32_t Tan = 0;
+            if (Read(At<uint32_t>(Img, D + DtTangent) + (uint64_t)I * 4, &Tan, 4))
+            {
+                float N[3];
+                IwctxReaders::UnpackNormalQuat(Tan, N);
+                V.Normal[0] = N[0], V.Normal[1] = N[1], V.Normal[2] = N[2];
+            }
+            const uint32_t Layers = std::max(At<uint32_t>(Img, D + DtLayers), 1u);
+            Read(At<uint32_t>(Img, D + DtUv) + (uint64_t)I * 8 * Layers, V.Uv, 8);
+            const uint32_t ColorAt = At<uint32_t>(Img, D + DtColor);
+            if (ColorAt != 0) Read(ColorAt + (uint64_t)I * 4, V.Color, 4);
+            return true;
+        };
+        std::unordered_map<uint32_t, std::string> Materials;
+        const auto MaterialOf = [&](uint32_t Index) -> const std::string& {
+            auto Found = Materials.find(Index);
+            if (Found == Materials.end())
+            {
+                const uint64_t Address = MaterialsAt >= 0 && Index < MaterialCount ? PointerAt(MaterialsAt + (int64_t)Index * 8) : 0;
+                if (Dbg)
+                    std::fprintf(Dbg, "[map material] %u at %llx (%s) hash %llx images %llx (%s) indices %llx\n", Index, (unsigned long long)Address,
+                                 ZoneOf(Address).c_str(), (unsigned long long)Get<uint64_t>(Address), (unsigned long long)Get<uint64_t>(Address + 0x30),
+                                 ZoneOf(Get<uint64_t>(Address + 0x30)).c_str(), (unsigned long long)Get<uint64_t>(Address + 0x28));
+                const XMaterial_t Mat = GameBlackOps7::ReadXMaterial(Address);
+                if (Dbg)
+                    for (const auto& I : Mat.Images)
+                        std::fprintf(Dbg, "[map material]   %s semantic %x %s at %llx (%s)\n", Mat.MaterialName.c_str(), I.SemanticHash, I.ImageName.c_str(),
+                                     (unsigned long long)I.ImagePtr, ZoneOf(I.ImagePtr).c_str());
+                Found = Materials.emplace(Index, Maps::AddMaterial(Scene, Mat)).first;
+            }
+            return Found->second;
+        };
+        const auto Range = [&](uint32_t B) {
+            const int64_t Brush = Brushes + (int64_t)B * BrushSize;
+            return std::make_pair(At<uint32_t>(Img, Brush + BrushStart), At<uint32_t>(Img, Brush + BrushEnd));
+        };
+        Maps::BuildWorld(Scene, Brushes >= 0 ? BrushCount : 0, SurfaceCount, Range, Fetch, [&](uint32_t S, Maps::WorldBuilder& Mesh) {
+            const int64_t Sf = Surfaces + (int64_t)S * SurfaceSize;
+            const int64_t D = Data + (int64_t)At<uint32_t>(Img, Sf + SfData) * DataSize;
+            const auto Z = Zones.find((int32_t)At<uint32_t>(Img, D + DtZone));
+            if (Z == Zones.end() || !Z->second.Ok)
+            {
+                Counter(Z == Zones.end() ? "map_surfaces_in_zones_not_read" : "map_surfaces_unread") += 1;
+                return;
+            }
+            const DrawData& Dz = Z->second;
+            const std::string& Material = MaterialOf(At<uint32_t>(Img, Sf + SfMaterial));
+            const uint16_t Faces = At<uint16_t>(Img, Sf + SfFaces), Vertices = At<uint16_t>(Img, Sf + SfVertices);
+            const uint32_t TableCount = At<uint16_t>(Img, Sf + SfTables);
+            const uint64_t TableAt = Dz.Tables + (uint64_t)At<uint32_t>(Img, Sf + SfTable) * 32;
+            const uint64_t PackedAt = Dz.Packed + At<uint32_t>(Img, Sf + SfPacked);
+            const uint64_t IndexAt = Dz.Indices + (uint64_t)At<uint32_t>(Img, Sf + SfFirstIndex) * 2;
+            for (uint32_t F = 0; F < Faces; F++)
+            {
+                uint32_t X[3]{};
+                if (!MeshDecode::UnpackDeltaFace(Dz.Buf, Dz.BufSize, TableAt, TableCount, PackedAt, IndexAt, F, X, 32, MeshDecode::Edge::Partial) || X[0] >= Vertices ||
+                    X[1] >= Vertices || X[2] >= Vertices)
+                {
+                    Counter("map_triangles_unread") += 1;
+                    continue;
+                }
+                if (!Mesh.Triangle(Material, FirstKey[S] + X[0], FirstKey[S] + X[1], FirstKey[S] + X[2])) Counter("map_triangles_unread") += 1;
+            }
+        });
+
+        // ---- the static models: an instance record names a model and a run of placements. A
+        // model in this zone is read by ExportMap; one a transient zone defines is read here.
+        const int64_t Sm = World + SModels;
+        const uint32_t ModelCount = At<uint32_t>(Img, Sm + SmModelCount), InstCount = At<uint32_t>(Img, Sm + SmInstCount);
+        const uint32_t PlaceCount = At<uint32_t>(Img, Sm + SmPlaceCount);
+        const int64_t SModelsAt = Off(PointerAt(Sm + SmModels)), Insts = Off(PointerAt(Sm + SmInsts)), Places = Off(PointerAt(Sm + SmPlacements));
+        std::unordered_map<uint64_t, std::string> Beside;   // a transient zone's model -> its name ("" unread)
+        const auto NameOf = [&](uint64_t Address) -> std::string {
+            if (Live().Contains(Address))
+            {
+                if (Dbg)
+                    std::fprintf(Dbg, "[map model] %llx name ptr %llx '%s' -> %s\n", (unsigned long long)Address, (unsigned long long)Get<uint64_t>(Address + ModelName),
+                                 CString(Get<uint64_t>(Address + ModelName)).c_str(), ModelAt(Address).c_str());
+                return ModelAt(Address);
+            }
+            if (Locate(Address, 0xd8) == nullptr) return std::string();
+            auto Found = Beside.find(Address);
+            if (Found != Beside.end()) return Found->second;
+            std::string N = CoDAssets::GameInstance->ReadNullTerminatedString(Get<uint64_t>(Address + ModelName));
+            N = N.empty() ? GameBlackOps7::HashName("xmodel", Get<uint64_t>(Address)) : Strings::Replace(N, "::", "_");
+            CoDModel_t Model;
+            Model.AssetName = ExportNaming::SafeFileName(N);
+            Model.AssetPointer = Address;
+            ExportWriters::LiveModel Read;
+            std::string Crash;
+            const bool Added = ExportWriters::ReadModel(Model, Read, Crash) == 0 && Maps::AddModel(Scene, N, Read);
+            Counter(Added ? "map_models_beside" : "map_models_beside_unread") += 1;
+            Beside.emplace(Address, Added ? N : std::string());
+            return Added ? N : std::string();
+        };
+        size_t Placed = 0;
+        for (uint32_t K = 0; SModelsAt >= 0 && Insts >= 0 && Places >= 0 && K < InstCount; K++)
+        {
+            const int64_t Rec = Insts + (int64_t)K * 24;
+            const uint32_t FirstPlace = At<uint32_t>(Img, Rec), Count = At<uint16_t>(Img, Rec + 4);
+            const uint16_t Model = At<uint16_t>(Img, Rec + 8);
+            if (Model >= ModelCount) continue;
+            const uint64_t Address = PointerAt(SModelsAt + (int64_t)Model * 16);
+            const std::string ModelName = NameOf(Address);
+            if (ModelName.empty())
+            {
+                if (Dbg)
+                    std::fprintf(Dbg, "[map no model] instance %u model %u address %llx located %d\n", K, Model, (unsigned long long)Address,
+                                 Locate(Address, 0xd8) != nullptr);
+                Counter("map_placements_without_model") += Count;
+                continue;
+            }
+            if (Live().Contains(Address)) Models.emplace(ModelName, Address);
+            for (uint32_t J = FirstPlace; J < FirstPlace + Count && J < PlaceCount; J++)
+            {
+                const int64_t P = Places + (int64_t)J * 24;
+                Maps::Instance In;
+                In.Name = "smodel_" + std::to_string(J);
+                In.Model = ModelName;
+                for (int A = 0; A < 3; A++) In.Origin[A] = (float)At<int32_t>(Img, P + A * 4) / 4096.0f;
+                float Q[4];
+                for (int A = 0; A < 4; A++) Q[A] = (float)At<uint16_t>(Img, P + 12 + A * 2) / 65535.0f * 2.0f - 1.0f;
+                Maps::AxisFromQuat(Q, In.Axis);
+                In.Scale = HalfFloats::ToFloat(At<uint16_t>(Img, P + 20));
+                Scene.StaticInstances.push_back(In);
+                Placed++;
+            }
+        }
+        if (Dbg)
+            std::fprintf(Dbg, "[map] static models %u instances %u placements %u placed %zu\n", ModelCount, InstCount, PlaceCount, Placed);
+
+        // ---- the terrain: vhmdata's heightmap, drawn where stterrain says (Games/IW/IwTerrain.h)
+        if (const int64_t Vhm = Root("vhmdata"); Vhm >= 0)
+        {
+            const int64_t St = Root("stterrain");
+            IwTerrain::Source Src;
+            Src.Locate = [this](uint64_t A, uint64_t N) { return Locate(A, N); };
+            Src.ImageName = [this](uint64_t Field) {
+                if (Field == 0) return std::string();
+                return GameBlackOps7::HashName("ximage", Locate(Field, 8) != nullptr ? Get<uint64_t>(Field) : Field);
+            };
+            if (const int64_t Vtm = Root("vtmdata"); Vtm >= 0) Src.Vtm = Live().Addr((uint64_t)Vtm);
+            Src.LayerMaterial = [this, &Scene](uint64_t Field) {
+                return Locate(Field, 0x78) != nullptr ? Maps::AddMaterial(Scene, GameBlackOps7::ReadXMaterial(Field)) : std::string();
+            };
+            std::map<std::string, size_t> Read;
+            IwTerrain::Read(Scene, Src, Live().Addr((uint64_t)Vhm), St >= 0 ? Live().Addr((uint64_t)St) : 0, IwTerrain::BlackOps7, IwTerrain::Options(), Read);
+            for (const auto& [K, N] : Read) Counter("map_" + K) += N;
+        }
+
+        // ---- the scriptables: map_ents (0x948) holds their instances at 0x318 (count u32 0x318, 0x60
+        // records at 0x388: definition 0, origin 8, angles 20 (pitch, yaw, roll)); a definition
+        // (scriptable, 0xd8) lists its models (count u32 0xb4, xmodel pointers 0xb8), each placed
+        if (const int64_t Ents = Root("map_ents"); Ents >= 0)
+        {
+            const uint32_t Count = At<uint32_t>(Img, Ents + 0x318);
+            const uint64_t Records = PointerAt(Ents + 0x388);
+            size_t Dynamic = 0;
+            for (uint32_t K = 0; K < Count && Locate(Records + (uint64_t)K * 0x60, 0x60) != nullptr; K++)
+            {
+                const uint64_t Rec = Records + (uint64_t)K * 0x60, Def = Get<uint64_t>(Rec);
+                if (Locate(Def, 0xd8) == nullptr)
+                {
+                    Counter("map_scriptables_without_definition")++;
+                    continue;
+                }
+                float Angles[3];
+                Maps::Instance In;
+                for (int A = 0; A < 3; A++) In.Origin[A] = Get<float>(Rec + 8 + A * 4), Angles[A] = Get<float>(Rec + 20 + A * 4);
+                Maps::AnglesToAxis(Angles, In.Axis);
+                const uint32_t ModelsIn = Get<uint32_t>(Def + 0xb4);
+                const uint64_t List = Get<uint64_t>(Def + 0xb8);
+                for (uint32_t M = 0; M < ModelsIn && M < 64 && Locate(List + M * 8, 8) != nullptr; M++)
+                {
+                    const uint64_t Address = Get<uint64_t>(List + M * 8);
+                    const std::string Name = NameOf(Address);
+                    if (Name.empty())
+                    {
+                        Counter("map_scriptable_models_unread")++;
+                        continue;
+                    }
+                    if (Live().Contains(Address)) Models.emplace(Name, Address);
+                    In.Name = "scriptable_" + std::to_string(K) + (M ? "_" + std::to_string(M) : std::string());
+                    In.Model = Name;
+                    Scene.DynamicInstances.push_back(In);
+                    Dynamic++;
+                }
+            }
+            Counter("map_scriptables") += Count;
+            Counter("map_scriptable_instances") += Dynamic;
+        }
+
+        // ---- the entities: map_game_objects' pairs (its 0x60 struct at 0x10), then each script
+        // brush model's (at 0x10); keys by IwEntityKeys' SaltFirst (the parser 0x78bb741)
+        // a pair: type bits 28-31 (0 a string, 4 a vector, 10 starts an entity: its ordinal the
+        // value), key bits 21-27, value bits 0-20 (mp_sat_sm_liminal's string pool is past 0xffff)
+        constexpr IwctxReaders::PairPacking EntityPairs{ 21, 21, 10, 4 };
+        size_t Ents = 0;
+        const auto OffOf = [this](uint64_t A) { return Off(A); };
+        const auto PtrAt = [this](int64_t P) { return PointerAt(P); };
+        if (const int64_t Go = Root("map_game_objects"); Go >= 0)
+            if (const int64_t P = Off(PointerAt(Go + 0x10)); P >= 0)
+                Scene.MapEnts += IwctxReaders::EntityText(Img, P, OffOf, PtrAt, Ents, IwEntityKeys::Scheme::SaltFirst, EntityPairs);
+        for (const auto& I : Walk().Instances)
+            if (OwnerIs(I, "scriptbrushmodel"))
+                Scene.MapEnts += IwctxReaders::EntityText(Img, I.Pos + 0x10, OffOf, PtrAt, Ents, IwEntityKeys::Scheme::SaltFirst, EntityPairs);
+        Counter("map_ents") += Ents;
+        return true;
+    }
+
+
+    class BlackOps7Game final : public DiskGame::IDiskGame
+    {
+    public:
+        const char* Id() const override { return "bo7"; }
+        const char* Title() const override { return "Call of Duty: Black Ops 7"; }
+        const char* Engine() const override { return "BO7"; }
+        std::unique_ptr<DiskGame::IDiskZone> Unopened() const override { return std::make_unique<BO7Zone>(std::string()); }
+
+        // (the install index opens every zone, the 41 333 transient (_tr) ones included: a map's
+        // references name assets of other maps' transient zones and of other modes' items)
+
+        // its zones open on the index's workers: their decompression and walk share nothing, its
+        // handlers and fixups run under the session lock, ResolveZones is serialized
+        bool IndexInParallel() const override { return true; }
+
+        std::unique_ptr<DiskGame::IDiskZone> Open(const std::string& Path, const DiskGame::ExportOptions& Options,
+                                                  std::string& Error) const override
+        {
+            // the packages the readers stream mesh and image data from (--install: the cod25 folder or the HQ install)
+            if (!Options.Install.empty() && TreyarchPackages::Open<XSUBCache>(Options.Install) == nullptr)
+            {
+                Error = "could not open the packages of " + Options.Install;
+                return nullptr;
+            }
+            auto Zone = std::make_unique<BO7Zone>(Path);
+            Zone->Install = Options.Install;
+            Zone->Indexing = Options.Indexing;
+            Zone->Game = this;
+            Zone->Options = Options;
+            if (!Zone->Open(Error)) return nullptr;
+            return Zone;
+        }
+    };
+
+    const BlackOps7Game Game;
+    const DiskGame::Registration Registered(Game);
+}

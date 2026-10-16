@@ -1,0 +1,22 @@
+# Generated from the recording - do not hand edit.
+# actions whose count-0 allocation still aligns the block cursor
+f9ed070|3
+fa0f550|16
+fa0f550|23
+fa0f550|30
+fa0f550|37
+fa0f550|44
+fa0f550|9
+fa11280|20
+fa11280|27
+fa11280|41
+fa11280|48
+fa11280|55
+stringtable|2
+weapon|22
+weapon|29
+weapon|36
+weapon|43
+weapon|57
+weapon|64
+weapon|71

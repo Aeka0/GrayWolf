@@ -1,0 +1,7 @@
+[submodule "src/External/DirectXShaderCompiler"]
+	path = src/External/DirectXShaderCompiler
+	url = https://github.com/microsoft/DirectXShaderCompiler
+[submodule "src/External/OpenAssetTools"]
+	path = src/External/OpenAssetTools
+	url = https://github.com/Kenshin9977/OpenAssetTools.git
+	branch = mw2-x64

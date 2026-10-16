@@ -1,0 +1,21 @@
+# block and alignment read off the machine code, for actions the recorded zones never fill
+# attachment 0x2e1dc60: the u32-counted arrays at 0x70, 0x80, 0x90 (alloc 0x2dd92e0: align 4, block 5)
+# and at 0x98, 0xa0 (alloc 0x2e12390: align 8), on both marker arms
+attachment|24|5|4
+attachment|26|5|4
+attachment|31|5|4
+attachment|33|5|4
+attachment|38|5|4
+attachment|40|5|4
+attachment|45|5|8
+attachment|47|5|8
+attachment|52|5|8
+attachment|54|5|8
+# weapon 0x2da05f0: the i32-counted arrays at 0xdf8 (0x2da12de: align 4) and 0xe08 (0x2da13d9: align 8), both marker arms
+f2da05f0|122|5|4
+f2da05f0|124|5|4
+f2da05f0|129|5|8
+f2da05f0|131|5|8
+# 0x2e32760: a 16-byte array at 8 counted by i32@0 (0x2e327cf: align 4), both marker arms
+f2e32760|3|5|4
+f2e32760|5|5|4

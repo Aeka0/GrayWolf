@@ -1,0 +1,4 @@
+# Actions whose allocation aligns the block cursor even when the count is 0, proven from the
+# machine code; merged into empties.txt when it is generated (too rare to win the vote).
+# menufile (0xe1950) +0x10: 0xe19d0 tests the menus pointer != 0, then 0xe19e6 aligns to 4 before count x 8
+menufile|2

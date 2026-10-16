@@ -1,0 +1,415 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Header Files\Games">
+      <UniqueIdentifier>{10ad97ca-acc7-4cb9-a3b8-67eee834296a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Games">
+      <UniqueIdentifier>{e3a9625f-b342-442b-8573-28a4172471f1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Packages">
+      <UniqueIdentifier>{17b18d8f-f35e-4ce4-9d05-5925d8dfd0a1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Packages">
+      <UniqueIdentifier>{a3e9d4e3-bbc8-4e83-b306-70b7338ba454}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Dialogs">
+      <UniqueIdentifier>{ff39dfbd-686f-418b-a6b9-7647b1f284f6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Dialogs">
+      <UniqueIdentifier>{55d89196-1db1-4642-b81c-847962a5a124}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Helpers">
+      <UniqueIdentifier>{7f5101ca-60c0-4cd8-b05a-424a846b5483}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Helpers">
+      <UniqueIdentifier>{bfb8855c-8003-454b-b481-475a7d7f186e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\CDNDownloaders">
+      <UniqueIdentifier>{1807d4b8-9287-4705-bd22-96e163435f4a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\CDNDownloaders">
+      <UniqueIdentifier>{59deb4e3-2469-4236-a8c3-142a394a2be6}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CliSupport.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CliCommands.Misc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CliCommands.AssetExport.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CliCommands.Tools.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CliCommands.Casc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CliCommands.Audio.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CliCommands.ModelPreview.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGuiLoadGamePanel.Disk.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDAssets.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LiveGames.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LiveExport.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PackageFileMode.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDAssetType.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AssetIndex.cpp">
+      <Filter>Source Files\Games</Filter>
+    </ClCompile>
+    <ClCompile Include="AssetFilter.cpp">
+      <Filter>Source Files\Games</Filter>
+    </ClCompile>
+    <ClCompile Include="AssetPreview.cpp">
+      <Filter>Source Files\Games</Filter>
+    </ClCompile>
+    <ClCompile Include="ModelPreview.cpp">
+      <Filter>Source Files\Games</Filter>
+    </ClCompile>
+    <ClCompile Include="CastReader.cpp">
+      <Filter>Source Files\Games</Filter>
+    </ClCompile>
+    <ClCompile Include="SeAnimReader.cpp">
+      <Filter>Source Files\Games</Filter>
+    </ClCompile>
+    <ClCompile Include="XAnimBinReader.cpp">
+      <Filter>Source Files\Games</Filter>
+    </ClCompile>
+    <ClCompile Include="SkeletalPreview.cpp">
+      <Filter>Source Files\Games</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDXAnimTranslator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDXModelTranslator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GameReaders.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDPackageCache.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="IWDCache.cpp">
+      <Filter>Source Files\Packages</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDIWIDecoder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MapSceneExport.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDIWITranslator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="IPAKCache.cpp">
+      <Filter>Source Files\Packages</Filter>
+    </ClCompile>
+    <ClCompile Include="PAKSupport.cpp">
+      <Filter>Source Files\Packages</Filter>
+    </ClCompile>
+    <ClCompile Include="PAKCache.cpp">
+      <Filter>Source Files\Packages</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDRawImageTranslator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="XPAKCache.cpp">
+      <Filter>Source Files\Packages</Filter>
+    </ClCompile>
+    <ClCompile Include="XPAKSupport.cpp">
+      <Filter>Source Files\Packages</Filter>
+    </ClCompile>
+    <ClCompile Include="IPAKSupport.cpp">
+      <Filter>Source Files\Packages</Filter>
+    </ClCompile>
+    <ClCompile Include="IWDSupport.cpp">
+      <Filter>Source Files\Packages</Filter>
+    </ClCompile>
+    <ClCompile Include="SABSupport.cpp">
+      <Filter>Source Files\Packages</Filter>
+    </ClCompile>
+    <ClCompile Include="SABCache.cpp">
+      <Filter>Source Files\Packages</Filter>
+    </ClCompile>
+    <ClCompile Include="GameWorldWar2.cpp">
+      <Filter>Source Files\Games</Filter>
+    </ClCompile>
+    <ClCompile Include="XPTOCCache.cpp">
+      <Filter>Source Files\Packages</Filter>
+    </ClCompile>
+    <ClCompile Include="Siren.cpp">
+      <Filter>Source Files\Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="XSUBCache.cpp">
+      <Filter>Source Files\Packages</Filter>
+    </ClCompile>
+    <ClCompile Include="GameVanguard.cpp">
+      <Filter>Source Files\Games</Filter>
+    </ClCompile>
+    <ClCompile Include="Parasyte.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDFileHandle.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDFileSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="WinFileSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CascFileSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDCDNCache.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDQTangent.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDXModelHelper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDXModelBonesHelper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoDCDNDownloader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CoDAssets.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LiveExport.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PackageFileMode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CliOptions.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CliSupport.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CliCommands.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDAssetType.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DBGameAssets.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AssetIndex.h">
+      <Filter>Header Files\Games</Filter>
+    </ClInclude>
+    <ClInclude Include="AssetFilter.h">
+      <Filter>Header Files\Games</Filter>
+    </ClInclude>
+    <ClInclude Include="AssetPreview.h">
+      <Filter>Header Files\Games</Filter>
+    </ClInclude>
+    <ClInclude Include="ModelPreview.h">
+      <Filter>Header Files\Games</Filter>
+    </ClInclude>
+    <ClInclude Include="CastReader.h">
+      <Filter>Header Files\Games</Filter>
+    </ClInclude>
+    <ClInclude Include="SeAnimReader.h">
+      <Filter>Header Files\Games</Filter>
+    </ClInclude>
+    <ClInclude Include="XAnimBinReader.h">
+      <Filter>Header Files\Games</Filter>
+    </ClInclude>
+    <ClInclude Include="SkeletalPreview.h">
+      <Filter>Header Files\Games</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDXAnimTranslator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDXModelTranslator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ICoDGame.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GameReaders.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ModernIwReaders.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PackedXAnim.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDPackageCache.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IWDCache.h">
+      <Filter>Header Files\Packages</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDIWIDecoder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MapSceneExport.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDIWITranslator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IPAKCache.h">
+      <Filter>Header Files\Packages</Filter>
+    </ClInclude>
+    <ClInclude Include="DBGameFiles.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PAKSupport.h">
+      <Filter>Header Files\Packages</Filter>
+    </ClInclude>
+    <ClInclude Include="PAKCache.h">
+      <Filter>Header Files\Packages</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDRawImageTranslator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XPAKCache.h">
+      <Filter>Header Files\Packages</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDXConverter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XPAKSupport.h">
+      <Filter>Header Files\Packages</Filter>
+    </ClInclude>
+    <ClInclude Include="IPAKSupport.h">
+      <Filter>Header Files\Packages</Filter>
+    </ClInclude>
+    <ClInclude Include="IWDSupport.h">
+      <Filter>Header Files\Packages</Filter>
+    </ClInclude>
+    <ClInclude Include="SABSupport.h">
+      <Filter>Header Files\Packages</Filter>
+    </ClInclude>
+    <ClInclude Include="SABCache.h">
+      <Filter>Header Files\Packages</Filter>
+    </ClInclude>
+    <ClInclude Include="GameWorldWar2.h">
+      <Filter>Header Files\Games</Filter>
+    </ClInclude>
+    <ClInclude Include="DBGameGenerics.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XPTOCCache.h">
+      <Filter>Header Files\Packages</Filter>
+    </ClInclude>
+    <ClInclude Include="Siren.h">
+      <Filter>Header Files\Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="XSUBCache.h">
+      <Filter>Header Files\Packages</Filter>
+    </ClInclude>
+    <ClInclude Include="GameVanguard.h">
+      <Filter>Header Files\Games</Filter>
+    </ClInclude>
+    <ClInclude Include="Parasyte.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDFileSystem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDFileHandle.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="WinFileSystem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CascFileSystem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDXAnimReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDCDNDownloader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDCDNCache.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDQTangent.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDXModelHelper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CoDXModelBonesHelper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GrayWolf.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="..\Resources\SettingNormal.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Resources\SettingSelect.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Resources\SettingHover.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\..\Core\Resources\CheckMarkIcon.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\Resources\GrayWolf.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="cpp.hint" />
+  </ItemGroup>
+  <ItemGroup>
+    <Manifest Include="GrayWolf.manifest" />
+  </ItemGroup>
+</Project>
